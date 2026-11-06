@@ -558,6 +558,40 @@ def test_version_gate_graceful_fallback(monkeypatch) -> None:
     assert Document("ที่ดิน", cursor_position=0).get_cursor_right_position(1) == 3
 
 
+def test_version_gate_rollback_covers_key_processor_patches(monkeypatch) -> None:
+    """Failure during the self-test must also undo the KeyProcessor patches."""
+    from prompt_toolkit.key_binding.key_processor import KeyProcessor
+
+    # Simulate a pre-installation prompt_toolkit: restore the original
+    # Document and KeyProcessor methods recorded at import time.
+    for method_name, original in thai._ORIGINAL_DOCUMENT_METHODS.items():
+        monkeypatch.setattr(Document, method_name, original)
+    for method_name, original in thai._ORIGINAL_KEY_PROCESSOR_METHODS.items():
+        if original is not None:
+            monkeypatch.setattr(KeyProcessor, method_name, original)
+
+    assert getattr(KeyProcessor._fix_vi_cursor_position, "_pyvim_thai_patched", False) is False, (
+        "precondition: KeyProcessor patches uninstalled"
+    )
+
+    # Corrupt the primitive used by the patched Document.right method so the
+    # startup self-test fails *after* all patches are applied:
+    monkeypatch.setattr(thai, "next_cell_offset", lambda line, col, count=1: col + 99)
+    assert thai.install_prompt_toolkit_thai_patches() is False
+
+    # Both KeyProcessor patches must be rolled back (docs/bugs/005.md):
+    assert getattr(KeyProcessor._fix_vi_cursor_position, "_pyvim_thai_patched", False) is False
+    assert getattr(KeyProcessor._start_timeout, "_pyvim_thai_patched", False) is False
+    # And the Document methods are the unpatched prompt_toolkit originals
+    # (cursor 0 -> first codepoint on "ที่ดิน", no cell-cluster snapping):
+    assert Document("ที่ดิน", cursor_position=0).get_cursor_right_position(1) == 1
+
+    # monkeypatch.undo() restores the pre-test (patched) state:
+    monkeypatch.undo()
+    assert Document("ที่ดิน", cursor_position=0).get_cursor_right_position(1) == 3
+    assert getattr(KeyProcessor._fix_vi_cursor_position, "_pyvim_thai_patched", False) is True
+
+
 def _build_sara_am_frames(base: str, sara_am: str) -> tuple[Screen, Screen]:
     """A previous frame with `base ำ` and a new frame where the ำ is deleted."""
     prev_screen = Screen()

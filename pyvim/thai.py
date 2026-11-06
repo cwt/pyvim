@@ -1030,6 +1030,9 @@ def _install_renderer_patch() -> bool:
 
 _ORIGINAL_DOCUMENT_METHODS: dict[str, Callable[..., Any]] = {}
 
+# Originals for the KeyProcessor patches (mirrors `_ORIGINAL_DOCUMENT_METHODS`).
+_ORIGINAL_KEY_PROCESSOR_METHODS: dict[str, Callable[..., Any]] = {}
+
 _DOCUMENT_PATCH_SPECS: tuple[tuple[str, tuple[str, ...], Callable[..., object]], ...] = (
     ("get_cursor_left_position", ("self", "count"), _doc_get_cursor_left_position),
     ("get_cursor_right_position", ("self", "count"), _doc_get_cursor_right_position),
@@ -1077,7 +1080,10 @@ def install_prompt_toolkit_thai_patches() -> bool:
     Install Thai/Lao cell-cluster and renderer patches onto `prompt_toolkit`
     with signature checks, startup self-test, and graceful fallback.
     """
-    applied: list[tuple[str, object]] = []
+    # Every patch applied in this call, so the except-path can roll back to
+    # an entirely unpatched prompt_toolkit (docs/bugs/005.md): (target,
+    # attribute, original function) triples.
+    applied: list[tuple[type, str, object]] = []
     try:
         for method_name, expected_params, replacement in _DOCUMENT_PATCH_SPECS:
             current = getattr(Document, method_name, None)
@@ -1096,21 +1102,25 @@ def install_prompt_toolkit_thai_patches() -> bool:
             _ORIGINAL_DOCUMENT_METHODS.setdefault(method_name, current)
             setattr(replacement, "_pyvim_thai_patched", True)
             setattr(Document, method_name, replacement)
-            applied.append((method_name, current))
+            applied.append((Document, method_name, current))
 
         # Patch KeyProcessor._fix_vi_cursor_position and _start_timeout.
         kp_fix = getattr(KeyProcessor, "_fix_vi_cursor_position", None)
         if kp_fix is not None and not getattr(kp_fix, "_pyvim_thai_patched", False):
             kp_params = tuple(inspect.signature(kp_fix).parameters.keys())
             if kp_params[:2] == ("self", "event"):
+                _ORIGINAL_KEY_PROCESSOR_METHODS.setdefault("_fix_vi_cursor_position", kp_fix)
                 setattr(_kp_fix_vi_cursor_position, "_pyvim_thai_patched", True)
                 setattr(KeyProcessor, "_fix_vi_cursor_position", _kp_fix_vi_cursor_position)
+                applied.append((KeyProcessor, "_fix_vi_cursor_position", kp_fix))
 
         kp_timeout = getattr(KeyProcessor, "_start_timeout", None)
         if kp_timeout is not None and not getattr(kp_timeout, "_pyvim_thai_patched", False):
+            _ORIGINAL_KEY_PROCESSOR_METHODS.setdefault("_start_timeout", kp_timeout)
             wrapped_timeout = _make_kp_start_timeout_wrapper(kp_timeout)
             setattr(wrapped_timeout, "_pyvim_thai_patched", True)
             setattr(KeyProcessor, "_start_timeout", wrapped_timeout)
+            applied.append((KeyProcessor, "_start_timeout", kp_timeout))
 
         # Startup self-test required by Section 4.1:
         test_doc = Document("ที่ดิน", cursor_position=0)
@@ -1120,8 +1130,8 @@ def install_prompt_toolkit_thai_patches() -> bool:
                 "Document('ที่ดิน', 0).get_cursor_right_position(1) != 3"
             )
     except Exception as exc:
-        for method_name, orig_fn in applied:
-            setattr(Document, method_name, orig_fn)
+        for target, attribute, orig_fn in applied:
+            setattr(target, attribute, orig_fn)
         logger.warning("Falling back to unpatched prompt_toolkit Document: %s", exc)
         return False
 
