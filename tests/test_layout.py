@@ -8,7 +8,11 @@ from __future__ import unicode_literals
 import types
 
 from prompt_toolkit.document import Document
-from prompt_toolkit.layout.processors import TransformationInput
+from prompt_toolkit.layout.processors import (
+    TabsProcessor,
+    TransformationInput,
+    merge_processors,
+)
 
 from pyvim.layout import ReportingProcessor, ReportMessageToolbar
 from pyvim.reporting import ReporterError
@@ -162,3 +166,94 @@ def test_report_message_toolbar_empty_without_errors(editor, editor_buffer):
 
     get_formatted_text = _get_formatted_text(ReportMessageToolbar(editor))
     assert get_formatted_text() == []
+
+
+# --- docs/bugs/011.md: error columns must be applied pre-tab-expansion ------
+
+
+def test_reporting_processor_runs_before_tab_processor(editor, editor_buffer):
+    # docs/bugs/011.md: ReportingProcessor must be the FIRST processor in the
+    # BufferControl chain, before TabsProcessor shifts the fragment index
+    # space from source columns to display columns.
+    editor.window_arrangement._add_editor_buffer(editor_buffer)
+    editor.sync_with_prompt_toolkit()
+
+    control = editor.editor_layout._create_buffer_control(editor_buffer)
+    order = list(control.input_processors)
+    assert isinstance(order[0], ReportingProcessor)
+    tab_position = order.index(next(p for p in order if isinstance(p, TabsProcessor)))
+    assert tab_position > 0
+
+
+def test_error_columns_align_with_tab_expanded_fragments():
+    # Functional check: with ReportingProcessor running first, an error on a
+    # tab-indented line highlights the *source* character, and the expanded
+    # tabulation keeps its own cells unhighlighted.
+    err = ReporterError(lineno=0, start_column=1, end_column=2, formatted_text=[])
+    eb = types.SimpleNamespace(report_errors_by_line={0: [err]})
+
+    lexer_fragments = [('', '\tx')]  # source: a tabulation then 'x'
+    document = Document('\tx', 0)
+    merged = merge_processors([ReportingProcessor(eb), TabsProcessor(tabstop=4)])
+    out = merged.apply_transformation(
+        TransformationInput(
+            buffer_control=None,
+            document=document,
+            lineno=0,
+            source_to_display=_identity_source_to_display,
+            fragments=lexer_fragments,
+            width=8,
+            height=1,
+        )
+    )
+
+    styled = [(style, text) for style, text in out.fragments]
+    error_cells = [t for s, t in styled if s == 'class:flakeserror']
+    assert error_cells == ['x'], styled
+    # The tabulation expands to four display cells, none error-styled:
+    assert sum(len(text) for style, text in styled if style == 'class:tab') == 4
+
+
+def test_error_columns_misalign_when_tabs_run_first():
+    # Documents the old (wrong) order so the regression stays meaningful:
+    # with TabsProcessor first, the source column would land inside the
+    # expanded tabulation instead of on 'x'.
+    err = ReporterError(lineno=0, start_column=1, end_column=2, formatted_text=[])
+    eb = types.SimpleNamespace(report_errors_by_line={0: [err]})
+
+    document = Document('\tx', 0)
+    merged = merge_processors([TabsProcessor(tabstop=4), ReportingProcessor(eb)])
+    out = merged.apply_transformation(
+        TransformationInput(
+            buffer_control=None,
+            document=document,
+            lineno=0,
+            source_to_display=_identity_source_to_display,
+            fragments=[('', '\tx')],
+            width=8,
+            height=1,
+        )
+    )
+    error_cells = [t for s, t in out.fragments if s == 'class:flakeserror']
+    assert error_cells != ['x']
+
+
+# --- docs/bugs/012.md: the toolbar shows every error of the line -------------
+
+
+def test_report_message_toolbar_shows_all_errors_of_line(editor, editor_buffer):
+    eb = editor_buffer
+    editor.window_arrangement._add_editor_buffer(eb)
+    editor.sync_with_prompt_toolkit()
+
+    err_a = ReporterError(0, 0, 1, [('class:flakemessage', 'first')])
+    err_b = ReporterError(0, 3, 4, [('class:flakemessage', 'second')])
+    eb.buffer.text = 'import os\nimport re\n'
+    eb.report_errors = [err_a, err_b]
+    eb.report_errors_by_line = {0: [err_a, err_b]}
+
+    get_formatted_text = _get_formatted_text(ReportMessageToolbar(editor))
+    fragments = get_formatted_text()
+    texts = [t for _style, t in fragments]
+
+    assert texts == ['first', '  ', 'second']

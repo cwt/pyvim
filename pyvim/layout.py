@@ -343,10 +343,18 @@ class ReportMessageToolbar(ConditionalContainer):
             lineno = eb.buffer.document.cursor_position_row
             errors = eb.report_errors_by_line.get(lineno)
 
-            if errors:
-                return errors[0].formatted_text
+            if not errors:
+                return []
 
-            return []
+            # A line can have several pyflakes findings: show all of them,
+            # separated by a blank, instead of only the first one.
+            # (docs/bugs/012.md)
+            fragments = []
+            for i, error in enumerate(errors):
+                if i:
+                    fragments.append(('', '  '))
+                fragments.extend(error.formatted_text)
+            return fragments
 
         super(ReportMessageToolbar, self).__init__(
             FormattedTextToolbar(get_formatted_text),
@@ -677,6 +685,12 @@ class EditorLayout(object):
             return self.editor.incsearch
 
         input_processors = [
+            # Pyflakes error highlighting must run BEFORE tab expansion:
+            # `ReporterError.start_column` counts source codepoints (raw
+            # lexer fragments), while `TabsProcessor` would shift the
+            # fragment index space to display columns and misalign the
+            # highlight on tab-indented lines. (docs/bugs/011.md)
+            ReportingProcessor(editor_buffer),
             # Processor for visualising spaces. (should come before the
             # selection processor, otherwise, we won't see these spaces
             # selected.)
@@ -696,8 +710,6 @@ class EditorLayout(object):
                     )
                 ),
             ),
-            # Reporting of errors, for Pyflakes.
-            ReportingProcessor(editor_buffer),
             HighlightSelectionProcessor(),
             ConditionalProcessor(
                 HighlightSearchProcessor(), Condition(lambda: self.editor.highlight_search)
