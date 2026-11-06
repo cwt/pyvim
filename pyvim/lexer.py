@@ -128,17 +128,12 @@ class DocumentLexer(Lexer):
                 return None
 
             def get_generator(i):
-                generator = find_closest_generator(i)
-                if generator:
-                    return generator
                 start = max(0, i - self.MIN_LINES_BACKWARDS)
                 if start == 0:
                     row, column = 0, 0
                 else:
                     row, column = syntax_sync.get_sync_start_position(document, start)
-                generator = find_closest_generator(i)
-                if not generator:
-                    generator = create_line_generator(row, column)
+                generator = create_line_generator(row, column)
                 if column:
                     next(generator)
                     row += 1

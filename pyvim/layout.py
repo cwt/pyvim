@@ -53,10 +53,7 @@ from .commands.lexer import create_command_lexer
 from .lexer import DocumentLexer
 from .welcome_message import WELCOME_MESSAGE_HEIGHT, WELCOME_MESSAGE_TOKENS, WELCOME_MESSAGE_WIDTH
 
-__all__ = (
-    'EditorLayout',
-    'get_terminal_title',
-)
+__all__ = ('EditorLayout',)
 
 
 def _try_char(character, backup, encoding=sys.stdout.encoding):
@@ -494,21 +491,6 @@ class SimpleArgToolbar(ConditionalContainer):
         )
 
 
-class PyvimScrollOffsets(ScrollOffsets):
-    def __init__(self, editor):
-        self.editor = editor
-        self.left = 0
-        self.right = 0
-
-    @property
-    def top(self):
-        return self.editor.scroll_offset
-
-    @property
-    def bottom(self):
-        return self.editor.scroll_offset
-
-
 class EditorLayout(object):
     """
     The main layout class.
@@ -774,15 +756,3 @@ class ReportingProcessor(Processor):
                         fragments[i] = ('class:flakeserror', fragments[i][1])
 
         return Transformation(fragments)
-
-
-def get_terminal_title(editor):
-    """
-    Return the terminal title,
-    e.g.: "filename.py (/directory) - Pyvim"
-    """
-    eb = editor.current_editor_buffer
-    if eb is not None:
-        return '%s - Pyvim' % (eb.location or '[New file]',)
-    else:
-        return 'Pyvim'

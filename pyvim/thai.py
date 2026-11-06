@@ -852,10 +852,8 @@ def _make_kp_start_timeout_wrapper(
             asyncio.get_running_loop()
         except RuntimeError:
             # When called synchronously from unit tests without a running
-            # event loop (Python 3.14+), skip spawning the background timeout
-            # coroutine if the key buffer is already empty.
-            if not self.key_buffer:
-                return
+            # event loop (Python 3.10+ behaviour, error since 3.14), skip
+            # spawning the background timeout coroutine entirely.
             return
         orig_start_timeout(self)
 

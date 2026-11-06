@@ -181,7 +181,6 @@ class Editor(object):
             editing_mode=EditingMode.VI,
             layout=self.editor_layout.layout,
             key_bindings=self.key_bindings,
-            #            get_title=lambda: get_terminal_title(self),
             style=DynamicStyle(lambda: self.current_style),
             paste_mode=Condition(lambda: self.paste_mode),
             #            ignore_case=Condition(lambda: self.ignore_case),  # TODO

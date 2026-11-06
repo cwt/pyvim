@@ -256,15 +256,6 @@ class WindowArrangement(object):
             if eb.location == location:
                 return eb
 
-    def get_editor_buffer_for_buffer_name(self, buffer_name):
-        """
-        Return the `EditorBuffer` for this buffer_name.
-        When not found, return None
-        """
-        for eb in self.editor_buffers:
-            if eb.buffer_name == buffer_name:
-                return eb
-
     def close_window(self):
         """
         Close active window of active tab.
