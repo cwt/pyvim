@@ -28,6 +28,14 @@ def _current_window_for_event(event):
     return event.app.layout.current_window
 
 
+def _keep_keysync_disabled(event):
+    """
+    Never record the partially-typed key buffer with the redo binding
+    (progressive typing should stay redo-friendly).
+    """
+    return False
+
+
 def create_key_bindings(editor):
     """
     Create custom key bindings.
@@ -79,7 +87,7 @@ def create_key_bindings(editor):
         # Restore cursor.
         b.cursor_position -= pos
 
-    @kb.add('c-r', filter=in_navigation_mode, save_before=(lambda e: False))
+    @kb.add('c-r', filter=in_navigation_mode, save_before=_keep_keysync_disabled)
     def redo(event):
         """
         Redo.
@@ -110,12 +118,14 @@ def create_key_bindings(editor):
         else:
             b.insert_text('\t')
 
+    def command_buffer_is_empty():
+        return editor.command_buffer.text == ''
+
     @kb.add('escape', filter=has_focus(editor.command_buffer))
     @kb.add('c-c', filter=has_focus(editor.command_buffer))
     @kb.add(
         'backspace',
-        filter=has_focus(editor.command_buffer)
-        & Condition(lambda: editor.command_buffer.text == ''),
+        filter=has_focus(editor.command_buffer) & Condition(command_buffer_is_empty),
     )
     def leave_command_mode(event):
         """

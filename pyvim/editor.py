@@ -172,18 +172,29 @@ class Editor(object):
         """
         Create CommandLineInterface instance.
         """
+
         # Create Application.
+        def current_style_getter():
+            "DynamicStyle hook for the editor colorscheme."
+            return self.current_style
+
+        def paste_mode_enabled():
+            return self.paste_mode
+
+        def mouse_support_enabled():
+            return self.enable_mouse_support
+
         application = Application(
             input=self.input,
             output=self.output,
             editing_mode=EditingMode.VI,
             layout=self.editor_layout.layout,
             key_bindings=self.key_bindings,
-            style=DynamicStyle(lambda: self.current_style),
-            paste_mode=Condition(lambda: self.paste_mode),
+            style=DynamicStyle(current_style_getter),
+            paste_mode=Condition(paste_mode_enabled),
             #            ignore_case=Condition(lambda: self.ignore_case),  # TODO
             include_default_pygments_style=False,
-            mouse_support=Condition(lambda: self.enable_mouse_support),
+            mouse_support=Condition(mouse_support_enabled),
             full_screen=True,
             enable_page_navigation_bindings=True,
         )

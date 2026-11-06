@@ -68,6 +68,11 @@ def _try_char(character, backup, encoding=sys.stdout.encoding):
 TABSTOP_DOT = _try_char('\u2508', '.')
 
 
+def get_welcome_message_tokens():
+    "Static formatted text tokens shown in the welcome window."
+    return WELCOME_MESSAGE_TOKENS
+
+
 class TabsControl(FormattedTextControl):
     """
     Displays the tabs at the top of the screen, when there is more than one
@@ -116,9 +121,12 @@ class TabsControl(FormattedTextControl):
 
 class TabsToolbar(ConditionalContainer):
     def __init__(self, editor):
+        def several_tabs():
+            return len(editor.window_arrangement.tab_pages) > 1
+
         super(TabsToolbar, self).__init__(
             Window(TabsControl(editor), height=1),
-            filter=Condition(lambda: len(editor.window_arrangement.tab_pages) > 1),
+            filter=Condition(several_tabs),
         )
 
 
@@ -168,7 +176,7 @@ class WelcomeMessageWindow(ConditionalContainer):
 
         super(WelcomeMessageWindow, self).__init__(
             Window(
-                FormattedTextControl(lambda: WELCOME_MESSAGE_TOKENS),
+                FormattedTextControl(get_welcome_message_tokens),
                 align=WindowAlign.CENTER,
                 style="class:welcome",
             ),
@@ -314,6 +322,9 @@ class MessageToolbarBar(ConditionalContainer):
     """
 
     def __init__(self, editor):
+        def has_message():
+            return editor.message is not None
+
         def get_tokens():
             if editor.message:
                 return [('class:message', editor.message)]
@@ -321,7 +332,7 @@ class MessageToolbarBar(ConditionalContainer):
                 return []
 
         super(MessageToolbarBar, self).__init__(
-            FormattedTextToolbar(get_tokens), filter=Condition(lambda: editor.message is not None)
+            FormattedTextToolbar(get_tokens), filter=Condition(has_message)
         )
 
 
@@ -424,6 +435,9 @@ class WindowStatusBarRuler(ConditionalContainer):
     """
 
     def __init__(self, editor, buffer_window, buffer):
+        def ruler_enabled():
+            return editor.show_ruler
+
         def get_scroll_text():
             info = buffer_window.render_info
 
@@ -465,7 +479,7 @@ class WindowStatusBarRuler(ConditionalContainer):
                 style='class:toolbar.status',
                 height=1,
             ),
-            filter=Condition(lambda: editor.show_ruler),
+            filter=Condition(ruler_enabled),
         )
 
 
@@ -497,6 +511,9 @@ class EditorLayout(object):
     def __init__(self, editor, window_arrangement):
         self.editor = editor  # Back reference to editor.
         self.window_arrangement = window_arrangement
+
+        def wildmenu_enabled():
+            return editor.show_wildmenu
 
         # Mapping from (`window_arrangement.Window`, `EditorBuffer`) to a frame
         # (Layout instance).
@@ -532,7 +549,7 @@ class EditorLayout(object):
                         CompletionsToolbar(),
                         filter=has_focus(editor.command_buffer)
                         & ~_bufferlist_overlay_visible(editor)
-                        & Condition(lambda: editor.show_wildmenu),
+                        & Condition(wildmenu_enabled),
                     ),
                 ),
                 Float(bottom=1, left=0, right=0, height=1, content=ValidationToolbar()),
@@ -616,27 +633,45 @@ class EditorLayout(object):
         def wrap_lines():
             return self.editor.wrap_lines
 
+        def scroll_offset():
+            return self.editor.scroll_offset
+
+        def relative_numbers_enabled():
+            return self.editor.relative_number
+
+        def line_numbers_enabled():
+            return self.editor.show_line_numbers
+
+        def cursorline_enabled():
+            return self.editor.cursorline
+
+        def cursorcolumn_enabled():
+            return self.editor.cursorcolumn
+
+        def get_colorcolumns():
+            return [ColorColumn(pos) for pos in self.editor.colorcolumn]
+
         window = Window(
             self._create_buffer_control(editor_buffer),
             allow_scroll_beyond_bottom=True,
             scroll_offsets=ScrollOffsets(
                 left=0,
                 right=0,
-                top=(lambda: self.editor.scroll_offset),
-                bottom=(lambda: self.editor.scroll_offset),
+                top=scroll_offset,
+                bottom=scroll_offset,
             ),
             wrap_lines=wrap_lines,
             left_margins=[
                 ConditionalMargin(
                     margin=NumberedMargin(
-                        display_tildes=True, relative=Condition(lambda: self.editor.relative_number)
+                        display_tildes=True, relative=Condition(relative_numbers_enabled)
                     ),
-                    filter=Condition(lambda: self.editor.show_line_numbers),
-                )
+                    filter=Condition(line_numbers_enabled),
+                ),
             ],
-            cursorline=Condition(lambda: self.editor.cursorline),
-            cursorcolumn=Condition(lambda: self.editor.cursorcolumn),
-            colorcolumns=(lambda: [ColorColumn(pos) for pos in self.editor.colorcolumn]),
+            cursorline=Condition(cursorline_enabled),
+            cursorcolumn=Condition(cursorcolumn_enabled),
+            colorcolumns=get_colorcolumns,
             ignore_content_width=True,
             ignore_content_height=True,
             get_line_prefix=partial(self._get_line_prefix, editor_buffer.buffer),
@@ -664,6 +699,25 @@ class EditorLayout(object):
         def preview_search():
             return self.editor.incsearch
 
+        def search_highlight_enabled():
+            return self.editor.highlight_search
+
+        def unprintable_enabled():
+            return self.editor.display_unprintable_characters
+
+        def tabstop_value():
+            return self.editor.tabstop
+
+        def tab_char1():
+            if self.editor.display_unprintable_characters:
+                return '|'
+            return ' '
+
+        def tab_char2():
+            if self.editor.display_unprintable_characters:
+                return _try_char('\u2508', '.', get_app().output.encoding())
+            return ' '
+
         input_processors = [
             # Pyflakes error highlighting must run BEFORE tab expansion:
             # `ReporterError.start_column` counts source codepoints (raw
@@ -674,29 +728,18 @@ class EditorLayout(object):
             # Processor for visualising spaces. (should come before the
             # selection processor, otherwise, we won't see these spaces
             # selected.)
-            ConditionalProcessor(
-                ShowTrailingWhiteSpaceProcessor(),
-                Condition(lambda: self.editor.display_unprintable_characters),
-            ),
+            ConditionalProcessor(ShowTrailingWhiteSpaceProcessor(), Condition(unprintable_enabled)),
             # Replace tabs by spaces.
             TabsProcessor(
-                tabstop=(lambda: self.editor.tabstop),
-                char1=(lambda: '|' if self.editor.display_unprintable_characters else ' '),
-                char2=(
-                    lambda: (
-                        _try_char('\u2508', '.', get_app().output.encoding())
-                        if self.editor.display_unprintable_characters
-                        else ' '
-                    )
-                ),
+                tabstop=tabstop_value,
+                char1=tab_char1,
+                char2=tab_char2,
             ),
             HighlightSelectionProcessor(),
-            ConditionalProcessor(
-                HighlightSearchProcessor(), Condition(lambda: self.editor.highlight_search)
-            ),
+            ConditionalProcessor(HighlightSearchProcessor(), Condition(search_highlight_enabled)),
             ConditionalProcessor(
                 HighlightIncrementalSearchProcessor(),
-                Condition(lambda: self.editor.highlight_search) & preview_search,
+                Condition(search_highlight_enabled) & preview_search,
             ),
             HighlightMatchingBracketProcessor(),
             DisplayMultipleCursors(),
