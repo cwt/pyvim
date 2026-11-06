@@ -107,6 +107,8 @@ def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
     assert completer._words_completer._cached_key is None, (
         '.py files with Jedi enabled must not use the words completer'
     )
+    # The jedi API introspection is computed once per session (docs/bugs/030.md):
+    assert __import__('pyvim.completion', fromlist=[''])._JEDI_TAKES_COLUMN is False
 
 
 def test_document_completer_falls_back_without_jedi(editor, editor_buffer, monkeypatch):

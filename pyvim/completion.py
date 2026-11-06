@@ -12,6 +12,10 @@ __all__ = (
     'DocumentWordsCompleter',
 )
 
+# Shape of the jedi API, cached on first use: `Script()` accepted
+# `line`/`column` keyword arguments until jedi 0.20 (docs/bugs/030.md).
+_JEDI_TAKES_COLUMN = None
+
 
 def _jedi_available():
     """
@@ -188,8 +192,13 @@ class _PythonCompleter(Completer):
             return None
 
         # `Script()` accepted `line`/`column` keyword arguments until jedi
-        # 0.20; detect which API we are talking to.
-        takes_column = 'column' in inspect.signature(jedi.Script).parameters
+        # 0.20; detect which API we are talking to. The answer is constant
+        # for the whole process, so introspect jedi only once per session
+        # (docs/bugs/030.md).
+        global _JEDI_TAKES_COLUMN
+        if _JEDI_TAKES_COLUMN is None:
+            _JEDI_TAKES_COLUMN = 'column' in inspect.signature(jedi.Script).parameters
+        takes_column = _JEDI_TAKES_COLUMN
 
         try:
             if takes_column:

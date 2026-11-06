@@ -52,6 +52,19 @@ class DocumentLexer(Lexer):
         self._cached_location = None
         self._pygments_lexer = None
         self._syntax_sync = None
+        self._directory_lexer = None
+
+    def _get_directory_lexer(self):
+        """
+        Cached `PygmentsLexer` for directory listing buffers.
+
+        Creating a `PygmentsLexer` scans the Pygments registry, so doing
+        that per keystroke in file-explorer mode paid ~0.6 ms for every
+        keypress (docs/bugs/030.md).
+        """
+        if self._directory_lexer is None:
+            self._directory_lexer = PygmentsLexer(DirectoryListingLexer, sync_from_start=False)
+        return self._directory_lexer
 
     def _ensure_lexer(self, location):
         """Load/cache the Pygments lexer for this location."""
@@ -86,9 +99,7 @@ class DocumentLexer(Lexer):
 
         if location:
             if getattr(self.editor_buffer, 'in_file_explorer_mode', False):
-                return PygmentsLexer(DirectoryListingLexer, sync_from_start=False).lex_document(
-                    document
-                )
+                return self._get_directory_lexer().lex_document(document)
 
             if not _STREAMING_AVAILABLE:
                 # Fallback for older prompt_toolkit versions.

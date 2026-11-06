@@ -115,3 +115,20 @@ def test_directory_listing_mode_still_uses_directory_lexer():
 
     for row in range(len(doc.lines)):
         assert new_get_line(row) == ref_get_line(row)
+
+
+def test_directory_listing_lexer_is_cached():
+    # docs/bugs/030.md: constructing a `PygmentsLexer` scans the Pygments
+    # registry; file-explorer buffers must reuse one instance instead of
+    # rebuilding it on every keystroke.
+    doc = Document('" Directory Listing\n../\nsubdir/\n', 0)
+    _ = doc.lines
+    stub = _StubEditorBuffer('/some/dir', in_file_explorer_mode=True)
+    lexer = DocumentLexer(stub)
+
+    first = lexer._get_directory_lexer()
+    second = lexer._get_directory_lexer()
+    assert first is second
+    # Two `lex_document` calls (keystrokes) reuse it as well:
+    lexer.lex_document(doc)
+    assert lexer._get_directory_lexer() is first
