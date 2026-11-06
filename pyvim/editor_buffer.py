@@ -11,6 +11,7 @@ from six import string_types
 
 from pyvim.completion import DocumentCompleter
 from pyvim.reporting import report
+from pyvim.thai import note_document_text
 
 PTK3 = ptk_version.startswith('3.')
 
@@ -55,6 +56,11 @@ class EditorBuffer(object):
 
         self._file_content = text
 
+        # Sticky Thai-text renderer gate (see pyvim/thai.py): O(1) for
+        # ASCII, so this is effectively free per buffer creation.
+        note_document_text(self.location)
+        note_document_text(self._file_content)
+
         # Create Buffer.
         self.buffer = Buffer(
             multiline=True,
@@ -82,6 +88,10 @@ class EditorBuffer(object):
         # Update the dirty flag once per text change, so that per-frame
         # `has_unsaved_changes` lookups are O(1).
         self._has_unsaved_changes = self.buffer.text != self._file_content
+
+        # Keep the sticky Thai-text renderer gate up to date (O(1) for ASCII
+        # content; one C-regex scan per edit while unlatched and non-ASCII).
+        note_document_text(self.buffer.text)
 
         self.run_reporter()
 

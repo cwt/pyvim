@@ -860,6 +860,59 @@ def _make_kp_start_timeout_wrapper(
 
 _SARA_AM_POISON = Char(char="\x00", style="__pyvim_sara_am_invalidate__")
 
+# C-speed detection for strings that may land on screen; ASCII strings are
+# free (`str.isascii()`), so the gate never needs to scan a screen grid to
+# decide whether one is worth the SARA-AM neighbor refresh.
+_HAS_THAI_RE = re.compile("[\u0e00-\u0eff]")
+
+
+class _ThaiTextGate:
+    """
+    Sticky "this session may render Thai/Lao text" flag.
+
+    `prompt_toolkit` exposes no cheap hook that says whether a rendered
+    `Screen` still contains Thai cells; scanning the whole grid per frame
+    costs ~1.3 ms on a 50x200 terminal with plain-ASCII content
+    (``docs/bugs/002.md``). Instead, pyvim reports the strings that reach
+    the screen (buffer text, buffer locations, command/search lines) via
+    `note_document_text` and the renderer wrapper skips the neighbor scan
+    entirely while the flag is still ``False``. Once latched ``True`` the
+    flag stays on for the rest of the session, so sessions that ever showed
+    Thai/Lao keep the full (correct) renderer behavior.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self) -> None:
+        self.value = False
+
+    def note(self, text: str | None) -> None:
+        """Record a string that may be rendered (sticky-latch on Thai)."""
+        if self.value or not text or text.isascii():
+            return
+        if _HAS_THAI_RE.search(text):
+            self.value = True
+
+    def reset(self) -> None:
+        """Reset for tests; production sessions never call this."""
+        self.value = False
+
+
+_THAI_GATE = _ThaiTextGate()
+
+
+def note_document_text(text: str | None) -> None:
+    """
+    Report a string that may be rendered on screen (buffer content, buffer
+    location, command or search line) to the renderer gate.
+    """
+    _THAI_GATE.note(text)
+
+
+def reset_thai_text_gate() -> None:
+    """Reset the sticky renderer gate (used by the test suite)."""
+    _THAI_GATE.reset()
+
 
 def _cell_has_sara_am(cell: Char) -> bool:
     ch = cell.char
@@ -889,8 +942,10 @@ def _sanitize_and_invalidate_sara_am(
     for y in row_indices:
         new_row = new_screen.data_buffer[y]
 
-        # 1. Clear stray width-0 combining cells not overwritten by a trailing character.
-        for x, cell in list(new_row.items()):
+        # 1. Clear stray width-0 combining cells not overwritten by a trailing
+        #    character. (Only values are replaced, so mutating while
+        #    iterating `items()` is safe and avoids copying the row.)
+        for x, cell in new_row.items():
             if cell.width == 0 and cell.char != "":
                 new_row[x] = Char(char=" ", style=cell.style)
 
@@ -954,8 +1009,12 @@ def _install_renderer_patch() -> bool:
         screen = args[2] if len(args) > 2 else kwargs.get("screen")
         previous_screen = args[5] if len(args) > 5 else kwargs.get("previous_screen")
         size = kwargs.get("size") or (args[11] if len(args) > 11 else None)
-        width = size.columns if size is not None else 80
-        if screen is not None:
+        # Skip the full-screen scan while the sticky gate says this session
+        # has never rendered Thai/Lao text (see `docs/bugs/002.md`); once a
+        # Thai-capable string was observed, always sanitize (unchanged
+        # semantics).
+        if _THAI_GATE.value and screen is not None:
+            width = size.columns if size is not None else 80
             _sanitize_and_invalidate_sara_am(screen, previous_screen, width)
         return orig_diff(*args, **kwargs)
 

@@ -29,7 +29,7 @@ from .io import DirectoryIO, FileIO, GZipFileIO, HttpIO
 from .key_bindings import create_key_bindings
 from .layout import EditorLayout
 from .style import generate_built_in_styles, get_editor_style_by_name
-from .thai import install_prompt_toolkit_thai_patches
+from .thai import install_prompt_toolkit_thai_patches, note_document_text
 from .window_arrangement import WindowArrangement
 
 __all__ = ('Editor',)
@@ -102,6 +102,11 @@ class Editor(object):
             # Execute command.
             handle_command(self, text)
 
+        # The command line renders user-typed text outside the document
+        # buffers: feed the sticky Thai-text renderer gate (see pyvim/thai.py).
+        def note_command_text(buff):
+            note_document_text(buff.text)
+
         commands_history = FileHistory(os.path.join(self.config_directory, 'commands_history'))
         self.command_buffer = Buffer(
             accept_handler=handle_action,
@@ -109,11 +114,15 @@ class Editor(object):
             completer=create_command_completer(self),
             history=commands_history,
             multiline=False,
+            on_text_changed=note_command_text,
         )
 
         search_buffer_history = FileHistory(os.path.join(self.config_directory, 'search_history'))
         self.search_buffer = Buffer(
-            history=search_buffer_history, enable_history_search=True, multiline=False
+            history=search_buffer_history,
+            enable_history_search=True,
+            multiline=False,
+            on_text_changed=note_command_text,
         )
 
         # Create key bindings registry.

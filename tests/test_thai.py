@@ -6,6 +6,7 @@ Unit tests for Thai (`U+0E00..U+0E7F`) and Lao (`U+0E80..U+0EFF`) script support
 from __future__ import annotations
 
 import prompt_toolkit.renderer as ptk_renderer
+import pytest
 from prompt_toolkit.application.current import set_app
 from prompt_toolkit.data_structures import Point, Size
 from prompt_toolkit.document import Document
@@ -246,8 +247,32 @@ class _RecordingOutput(DummyOutput):
         self.written.append(data)
 
 
+def _gate_fixture(monkeypatch):
+    """Save/restore the sticky Thai-text renderer gate around a test."""
+    saved = thai._THAI_GATE.value
+    thai._THAI_GATE.value = False
+    try:
+        yield thai._THAI_GATE
+    finally:
+        thai._THAI_GATE.reset()
+        thai._THAI_GATE.value = saved
+
+
+@pytest.fixture
+def sticky_gate(monkeypatch):
+    """Force the sticky Thai-text renderer gate off for a deterministic test."""
+    saved = thai._THAI_GATE.value
+    monkeypatch.setattr(thai._THAI_GATE, "value", False)
+    yield thai._THAI_GATE
+    thai.reset_thai_text_gate()
+    thai._THAI_GATE.value = saved
+
+
 def test_sara_am_renderer_neighbor_refresh() -> None:
     install_prompt_toolkit_thai_patches()
+    # The wrapper only sanitizes once the session reported Thai-capable text;
+    # this test renders กำ/ກຳ frames, so latch the sticky gate.
+    thai.note_document_text("\u0e33")
     editor = _make_editor_with_text("")
     app = editor.application
     size = Size(rows=24, columns=80)
@@ -531,3 +556,103 @@ def test_version_gate_graceful_fallback(monkeypatch) -> None:
     monkeypatch.setattr(Document, "get_cursor_left_position", orig_left)
     assert thai.install_prompt_toolkit_thai_patches() is True
     assert Document("ที่ดิน", cursor_position=0).get_cursor_right_position(1) == 3
+
+
+def _build_sara_am_frames(base: str, sara_am: str) -> tuple[Screen, Screen]:
+    """A previous frame with `base ำ` and a new frame where the ำ is deleted."""
+    prev_screen = Screen()
+    prev_screen.height = 1
+    prev_screen.data_buffer[0][0] = Char(base, "")
+    prev_screen.data_buffer[0][1] = Char(sara_am, "")
+
+    new_screen = Screen()
+    new_screen.height = 1
+    new_screen.data_buffer[0][0] = Char(base, "")
+    new_screen.data_buffer[0][1] = Char(" ", "")
+    return prev_screen, new_screen
+
+
+def test_renderer_gate_skips_ascii_frames(sticky_gate) -> None:
+    """With no Thai seen yet, the wrapper must not mutate/pre-scan screens."""
+    install_prompt_toolkit_thai_patches()
+    editor = _make_editor_with_text("")
+    app = editor.application
+    size = Size(rows=24, columns=80)
+    attrs_cache = ptk_renderer._StyleStringToAttrsCache(
+        DummyStyle().get_attrs_for_style_str, DummyStyleTransformation()
+    )
+    has_style_cache = ptk_renderer._StyleStringHasStyleCache(attrs_cache)
+
+    prev_screen, new_screen = _build_sara_am_frames("ก", "\u0e33")
+    out = _RecordingOutput()
+    ptk_renderer._output_screen_diff(
+        app,
+        out,
+        new_screen,
+        Point(0, 0),
+        ColorDepth.DEPTH_8_BIT,
+        prev_screen,
+        None,
+        False,
+        full_screen=True,
+        attrs_for_style_string=attrs_cache,
+        style_string_has_style=has_style_cache,
+        size=size,
+        previous_width=size.columns,
+    )
+    assert sticky_gate.value is False
+    # No poisoning happened: the previous screen stayed untouched.
+    assert prev_screen.data_buffer[0][0].char == "ก"
+    assert prev_screen.data_buffer[0][1].char == "\u0e33"
+
+
+def test_buffer_text_latches_gate_and_sanitizer_resumes(sticky_gate) -> None:
+    """Typing Thai into the buffer must latch the gate (O(1) for ASCII)."""
+    install_prompt_toolkit_thai_patches()
+    editor = _make_editor_with_text("")
+    app = editor.application
+    size = Size(rows=24, columns=80)
+    attrs_cache = ptk_renderer._StyleStringToAttrsCache(
+        DummyStyle().get_attrs_for_style_str, DummyStyleTransformation()
+    )
+    has_style_cache = ptk_renderer._StyleStringHasStyleCache(attrs_cache)
+
+    buff = editor.current_editor_buffer.buffer
+    buff.text = "กำ"
+    assert sticky_gate.value is True, "Thai buffer text must latch the gate"
+
+    prev_screen, new_screen = _build_sara_am_frames("ก", "\u0e33")
+    out = _RecordingOutput()
+    ptk_renderer._output_screen_diff(
+        app,
+        out,
+        new_screen,
+        Point(0, 0),
+        ColorDepth.DEPTH_8_BIT,
+        prev_screen,
+        None,
+        False,
+        full_screen=True,
+        attrs_for_style_string=attrs_cache,
+        style_string_has_style=has_style_cache,
+        size=size,
+        previous_width=size.columns,
+    )
+    # Once latched, the neighbor refresh is back: ก must be re-emitted.
+    assert prev_screen.data_buffer[0][0] == _SARA_AM_POISON
+    assert "ก" in "".join(out.written)
+
+
+def test_sticky_gate_note_document_text(sticky_gate) -> None:
+    # ASCII / empty strings are free and never latch.
+    thai.note_document_text("plain ascii text")
+    thai.note_document_text("")
+    thai.note_document_text(None)
+    thai.note_document_text("accented é but no Thai")
+    assert sticky_gate.value is False
+    # Thai text latches; Lao text too.
+    thai.note_document_text("กำ")
+    assert sticky_gate.value is True
+    sticky_gate.value = False
+    thai.note_document_text("ຳ")
+    assert sticky_gate.value is True
