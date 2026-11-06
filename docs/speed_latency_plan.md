@@ -1,8 +1,8 @@
 ---
 type: project_priority
 title: "Speed, Latency & Python 3.15 Stability Plan for pyvim"
-description: "Codebase audit, reproducible benchmarks (tools/bench_plans.py), and actionable optimization plan to fix Python 3.14+ startup crashes and reduce latency in pyvim without modifying prompt-toolkit."
-status: draft
+description: "Codebase audit, reproducible benchmarks (tools/bench_plans.py), and the P0-P5 optimization plan - IMPLEMENTED and machine-verified at hg rev 161 (024e7f40f812); mypy follow-up sweep at rev 162 (e8122198d2b2). No prompt-toolkit modifications."
+status: stable
 sources:
   - ../pyvim/editor.py
   - ../pyvim/editor_buffer.py
@@ -16,18 +16,28 @@ sources:
   - ../pyvim/commands/completer.py
   - ../pyvim/io/backends.py
   - ../tools/bench_plans.py
+  - ../tests/test_editor_buffer.py
+  - ../tests/test_lexer.py
+  - ../tests/test_style.py
+  - ../tests/test_completion.py
+  - ../tests/test_layout.py
+  - ../tests/test_io_backends.py
+  - ../mypy.ini
 verified: machine-confirmed
 stale_after: 2027-01-01T00:00:00Z
-tags: [performance, latency, optimization, python-3.15, asyncio, lexer, rendering]
-generated:
+tags: [performance, latency, optimization, python-3.15, asyncio, lexer, rendering, implemented]
+originally_generated:
   by: "Antigravity (Gemini 4 Argon)"
   at: "2026-11-06T02:44:00Z"
-timestamp: 2026-11-06T02:44:00Z
+generated:
+  by: "Agnes (Sapiens AI)"
+  at: "2026-11-06T07:30:00Z"
+timestamp: 2026-11-06T07:30:00Z
 ---
 
 # Speed, Latency & Python 3.15 Stability Plan for `pyvim`
 
-This document catalogs the stability bugs, per-keystroke latency bottlenecks, and startup/rendering overhead identified across the `pyvim` codebase. Every optimization in this plan is designed to be implemented **purely inside `pyvim`** using public APIs without modifying `prompt_toolkit`, and all verification checks and benchmark figures are reproducible via `python tools/bench_plans.py`[^src-bench].
+This document catalogs the stability bugs, per-keystroke latency bottlenecks, and startup/rendering overhead identified across the `pyvim` codebase. **Status: all of P0–P5 are implemented (hg rev 161, `024e7f40f812`) and machine-verified** — 42 new unit tests across six files ([`tests/`](../tests/)[^src-tests]), 55 total passing, with final figures from `python tools/bench_plans.py`[^src-bench]. A follow-up mypy baseline & sweep landed at rev 162 (`e8122198d2b2`). See §1.3 for the full implementation record. Every optimization was implemented **purely inside `pyvim`** using public APIs without modifying `prompt_toolkit`.
 
 ---
 
@@ -44,7 +54,11 @@ This document catalogs the stability bugs, per-keystroke latency bottlenecks, an
 | **P4** | **Per-Frame `ReportingProcessor` & `ReportMessageToolbar` Error Scan** | `pyvim/layout.py:272-293, 627-645`[^src-layout] | Scans `editor_buffer.report_errors` linearly (`O(V \times E)`) on every visible line per frame and calls `explode_text_fragments` inside the inner loop. | **`O(1)` dict lookup** per visible line via `report_errors_by_line`. |
 | **P5** | **`codecs.open` Deprecation (Python 3.14+) & Minor Render/Dirty Cleanups** | `pyvim/io/backends.py:33-57`, `pyvim/editor_buffer.py:74-78`, `pyvim/commands/commands.py:747-750`[^src-backends][^src-commands] | `codecs.open` is officially deprecated in Python 3.14+; `:s` (`substitute`) constructs `Document(new_text)` twice per matched line; `has_unsaved_changes` compares full strings per frame (`~2.4 µs` per 100 KB). | C-accelerated `io.open`, single `Document` construction in `:s`, `O(1)` dirty flag. |
 
+> **All of P0–P5: implemented** in hg rev 161 (`024e7f40f812`), machine-verified (42 new unit tests + `tools/bench_plans.py` parity/perf checks); follow-up fixes recorded in §1.4, mypy baseline in §1.3 (rev 162, `e8122198d2b2`).
+
 ### 1.2 Reproducible Benchmark Output (`python tools/bench_plans.py`)
+
+*Before* implementation (the reference figures the plan was designed against):
 
 ```text
 === 2. Speed & Latency Plan Verification & Micro-Benchmarks ===
@@ -55,6 +69,32 @@ This document catalogs the stability bugs, per-keystroke latency bottlenecks, an
   P2 Style init (50 styles): cold_eager=17.87 ms (cold get_all_styles=1.17 ms) -> deferred _LazyStylesDict startup=0.09 ms
   P3 DocumentWordsCompleter (4000 lines, typing on current line): fresh=3.12 ms -> singleton_cached=0.182 ms
 ```
+
+*After* implementation (rev 161+162, Python 3.15.2 / prompt_toolkit 3.0.53, macOS arm64): the “current” column now runs the new streaming/cached code, so both sides are fast, and the hot paths beat the original targets:
+
+```text
+  Verified P1 multiline docstring token parity (lines 75..140): PASS
+  P1a DocumentLexer (top 40 lines of 4000-line file): current=1.40 ms -> cached+streaming=1.36 ms   (was 128.92 ms pre-implementation)
+  P1b DocumentLexer (middle 40 lines @ 2000 of 4000-line file): current=3.07 ms -> cached+streaming=3.09 ms (was 68.56 ms pre-implementation)
+  P1c DocumentLexer (bottom 40 lines of 4000-line file): current=3.08 ms -> cached+streaming=3.06 ms
+  P2 Style init (50 styles): cold_eager=0.44 ms (get_all_styles deferred; measured warm in-process) -> deferred _LazyStylesDict startup=0.11-0.14 ms
+  P3 DocumentWordsCompleter (4000 lines, typing on current line): fresh=2.25 ms -> singleton_cached=0.038 ms
+```
+
+### 1.3 Implementation Record (rev 161–162, 2026-11-06)
+
+* **Implementation (rev 161, `024e7f40f812`)**: P0–P5 landed as one verified changeset — 8 modified source files plus six new test modules (42 tests): [`tests/test_editor_buffer.py`](../tests/test_editor_buffer.py) (P0/P5, 9 tests), [`tests/test_lexer.py`](../tests/test_lexer.py) (P1, 5), [`tests/test_style.py`](../tests/test_style.py) (P2, 7), [`tests/test_completion.py`](../tests/test_completion.py) (P3, 8), [`tests/test_layout.py`](../tests/test_layout.py) (P4, 7), [`tests/test_io_backends.py`](../tests/test_io_backends.py) (P5, 6).[^src-tests]
+* **Mypy sweep (rev 162, `e8122198d2b2`)**: added [`mypy.ini`](../mypy.ini)[^src-mypy] (`python_version = 3.15`, `ignore_missing_imports`) and fixed the 9 pre-existing code-level errors: two `no-redef` misnamed handler defs (`pwd` → `cd` for `:cd`; `set_scroll_offset` → `set_colorcolumn` for `:colorcolumn`; registration is decorator-driven, so the renames are behavior-neutral), four unannotated module-level tables in `pyvim/commands/commands.py`, `six.with_metaclass(ABCMeta, object)` → `metaclass=ABCMeta` in `pyvim/io/base.py`, and a targeted `# type: ignore[attr-defined]` on the legacy PTK2-only `prompt_toolkit.eventloop` import in `pyvim/editor_buffer.py`. `mypy .` is clean (38 files); 55 tests pass.
+
+### 1.4 Deviations & Fixes Beyond the Original Spec
+
+| Item | Deviation / fix & rationale |
+| :--- | :--- |
+| **P0** | `ReporterError` has no `__eq__`, so `report_errors != self.report_errors` in `ready()` is instance-based: with unchanged text the freshly returned error list is re-published each background completion (the old errors stay rendered until completion, so the flicker is still gone). A content-based dedup would require adding `__eq__` to `ReporterError` — not adopted. |
+| **P1** | The streaming path is behind a `_STREAMING_AVAILABLE` guard: `DocumentLexer` falls back to legacy `PygmentsLexer.from_filename` when `RegexSync`/`pygments_token_to_classname` are unavailable, and caches *misses* too, so unknown extensions don't re-scan the Pygments registry on every keystroke. |
+| **P3** | Post-implementation follow-up (same changeset): `jedi` 0.20 removed the `Script(line=, column=)` constructor arguments and `completions()`. `_PythonCompleter` now detects the API via `inspect.signature(jedi.Script)` and calls `Script.complete(line, column)` on jedi ≥ 0.20 (and `completions()` on older jedi). The Jedi test skips when jedi is not installed. |
+| **P4** | `TransformationInput.lineno` in prompt_toolkit 3.0.53 is **0-based** (`BufferControl._create_get_processed_line_func` → `get_processed_line(i)`, `i ∈ 0..line_count-1`), matching the 0-based `ReporterError.lineno`; `ReportingProcessor` therefore looks up `report_errors_by_line.get(transformation_input.lineno)` (no offset). `tests/test_layout.py` pins this exact semantics. |
+| **P5** | `io.open` takes `encoding` as a **keyword** only (its 3rd positional parameter is `buffering`): `io.open(location, 'r', encoding=e)`. `:s` derives the cursor from a single `Document` — start-of-line plus that line's leading-whitespace count, replicating prompt_toolkit's `get_start_of_line_position(after_whitespace=True)` relative offset. |
 
 ---
 
@@ -324,3 +364,5 @@ And in `ReportMessageToolbar` (`pyvim/layout.py:278-288`):
 [^src-commands]: `pyvim/commands/commands.py` (`substitute`) — [../pyvim/commands/commands.py](../pyvim/commands/commands.py)
 [^src-backends]: `pyvim/io/backends.py` (`FileIo`, `GZipFileIo`) — [../pyvim/io/backends.py](../pyvim/io/backends.py)
 [^src-bench]: `tools/bench_plans.py` (Reproducible cell-cluster & latency benchmark script) — [../tools/bench_plans.py](../tools/bench_plans.py)
+[^src-tests]: `tests/test_editor_buffer.py`, `tests/test_lexer.py`, `tests/test_style.py`, `tests/test_completion.py`, `tests/test_layout.py`, `tests/test_io_backends.py` (unit tests pinning P0–P5 behaviour, added in hg rev 161) — [../tests/](../tests/)
+[^src-mypy]: `mypy.ini` (mypy baseline: `python_version = 3.15`, `ignore_missing_imports`; added in hg rev 162) — [../mypy.ini](../mypy.ini)
