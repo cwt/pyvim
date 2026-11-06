@@ -17,7 +17,10 @@ PTK3 = ptk_version.startswith('3.')
 if PTK3:
     import asyncio
 else:
-    from prompt_toolkit.eventloop import call_from_executor, run_in_executor
+    # `prompt_toolkit.eventloop` only exists in prompt_toolkit 2.x;
+    # `# type: ignore` because mypy only sees the installed (3.x) package.
+    from prompt_toolkit.eventloop import (  # type: ignore[attr-defined]
+        call_from_executor, run_in_executor)
 
 __all__ = (
     'EditorBuffer',

@@ -5,6 +5,7 @@ from prompt_toolkit.document import Document
 import os
 import re
 import six
+from typing import Any, Dict, Set
 
 __all__ = (
     'has_command_handler',
@@ -12,10 +13,10 @@ __all__ = (
 )
 
 
-COMMANDS_TO_HANDLERS = {}  # Global mapping Vi commands to their handler.
-COMMANDS_TAKING_LOCATIONS = set()  # Name of commands that accept locations.
-SET_COMMANDS = {}  # Mapping ':set'-commands to their handler.
-SET_COMMANDS_TAKING_VALUE = set()
+COMMANDS_TO_HANDLERS: Dict[str, Any] = {}  # Global mapping Vi commands to their handler.
+COMMANDS_TAKING_LOCATIONS: Set[str] = set()  # Name of commands that accept locations.
+SET_COMMANDS: Dict[str, Any] = {}  # Mapping ':set'-commands to their handler.
+SET_COMMANDS_TAKING_VALUE: Set[str] = set()
 
 
 _NO_WRITE_SINCE_LAST_CHANGE_TEXT = 'No write since last change (add ! to override)'
@@ -412,7 +413,7 @@ def pwd(editor):
 
 
 @location_cmd('cd', accepts_force=False)
-def pwd(editor, location):
+def cd(editor, location):
     " Change working directory. "
     try:
         os.chdir(location)
@@ -696,7 +697,7 @@ def disable_cursorcolumn(editor):
 
 @set_cmd('colorcolumn', accepts_value=True)
 @set_cmd('cc', accepts_value=True)
-def set_scroll_offset(editor, value):
+def set_colorcolumn(editor, value):
     try:
         if value:
             numbers = [int(val) for val in value.split(',')]
