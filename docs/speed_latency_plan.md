@@ -1,11 +1,12 @@
 ---
 type: project_priority
 title: "Speed, Latency & Python 3.15 Stability Plan for pyvim"
-description: "Codebase audit and actionable optimization plan to reduce startup time, per-keystroke latency, and per-frame rendering overhead in pyvim without modifying prompt-toolkit."
+description: "Codebase audit, reproducible benchmarks (tools/bench_plans.py), and actionable optimization plan to fix Python 3.14+ startup crashes and reduce latency in pyvim without modifying prompt-toolkit."
 status: draft
 sources:
   - ../pyvim/editor.py
   - ../pyvim/editor_buffer.py
+  - ../pyvim/window_arrangement.py
   - ../pyvim/layout.py
   - ../pyvim/lexer.py
   - ../pyvim/reporting.py
@@ -13,290 +14,265 @@ sources:
   - ../pyvim/style.py
   - ../pyvim/commands/commands.py
   - ../pyvim/io/backends.py
+  - ../tools/bench_plans.py
 verified: machine-confirmed
 stale_after: 2027-01-01T00:00:00Z
 tags: [performance, latency, optimization, python-3.15, asyncio, lexer, rendering]
 generated:
   by: "Antigravity (Gemini 4 Argon)"
-  at: "2026-11-05T17:38:00Z"
-timestamp: 2026-11-05T17:38:00Z
+  at: "2026-11-05T18:05:00Z"
+timestamp: 2026-11-05T18:05:00Z
 ---
 
 # Speed, Latency & Python 3.15 Stability Plan for `pyvim`
 
-This document catalogs the performance bottlenecks, per-keystroke latency sources, and a critical Python 3.15 startup crash identified across the `pyvim` codebase. Every optimization in this plan is designed to be implemented **purely inside `pyvim`** without modifying `prompt_toolkit`.
+This document catalogs the stability bugs, per-keystroke latency bottlenecks, and startup/rendering overhead identified across the `pyvim` codebase. Every optimization in this plan is designed to be implemented **purely inside `pyvim`** without modifying `prompt_toolkit`, and all benchmark figures are reproducible via `python tools/bench_plans.py`[^src-bench].
 
 ---
 
-## 1. Executive Summary & Benchmark Baseline
+## 1. Executive Summary, Reproducible Benchmarks & Execution Order
 
-Profiling `pyvim` on **Python 3.15.2** (macOS arm64) reveals that most editor latency comes not from `prompt_toolkit`'s core rendering loop, but from how `pyvim` wraps `prompt_toolkit`'s lexer, style registry, background error reporter, status bar, and autocompleter:
+### 1.1 Priority Matrix
 
-| Rank | Subsystem | Location | Current Cost / Issue | Target Cost After Fix |
+| Rank | Subsystem | Location | Current Issue & Measured Cost | Target After Fix |
 | :--- | :--- | :--- | :--- | :--- |
-| **P0** | **Asyncio Event Loop Crash & Reporter Bug** | [`editor_buffer.py:174-217`](../pyvim/editor_buffer.py) | **Crashes on Python 3.15** when opening a file (`get_event_loop()` called before `Application.run()`); permanently wedges reporter on new buffers; triggers background threads + full redraws on non-Python files. | `0` crashes, `0` background tasks for non-`.py` files, debounced AST checks. |
-| **P1** | **Per-Keystroke Lexer Re-instantiation** | [`lexer.py:19-31`](../pyvim/lexer.py) | Creates a new `PygmentsLexer.from_filename()` on every edit, destroying `PygmentsLexer`'s internal incremental line cache (`2.89 ms/keystroke` at line 2000). | Cached per buffer (`1.64 ms/keystroke`, **~43% faster** incremental lexing). |
-| **P2** | **Eager Style Compilation on Startup** | [`style.py:33-37`](../pyvim/style.py), [`editor.py:80`](../pyvim/editor.py) | Imports and compiles all 50 Pygments styles on `Editor()` startup (`18.19 ms`). | Lazy load on `:colorscheme` (`0.09 ms` at startup, **~200x faster**). |
-| **P3** | **Per-Frame Full-File Dirty Check** | [`editor_buffer.py:74-78`](../pyvim/editor_buffer.py), [`layout.py:77,344`](../pyvim/layout.py) | Evaluates `self._file_content != self.buffer.text` (`O(N)` string comparison) on every render frame for every visible window and tab. | Cached boolean flag (`O(1)`, `~15 ns` per frame). |
-| **P4** | **Per-Frame `O(V × E)` Error Scanning** | [`layout.py:278-288,627-646`](../pyvim/layout.py), [`reporting.py:65-79`](../pyvim/reporting.py) | Linearly scans `report_errors` for every visible line on every frame and calls `explode_text_fragments` inside the inner loop. | Pre-indexed `dict[lineno, list[ReporterError]]` (`O(1)` per visible line). |
-| **P5** | **Full-Document Regex Split in Autocomplete** | [`completion.py:12-55`](../pyvim/completion.py) | Calls `re.split(r'\W', document.text)` and instantiates new `Completer` objects on every keystroke (`1.55 ms/call` on 4,000 lines). | Cached word set per `document.text` + precompiled `finditer` (`< 0.05 ms/call`, **>30x faster**). |
-| **P6** | **Per-Frame Layout Allocations & I/O** | [`layout.py:489-588`](../pyvim/layout.py), [`commands.py:712-756`](../pyvim/commands/commands.py), [`backends.py:33-57`](../pyvim/io/backends.py) | Re-allocates `ColorColumn` lists, re-tests stdout encoding per frame, constructs `Document(new_text)` twice in `:substitute`, and uses legacy `codecs.open`. | Cached layout tokens, single `Document` build, C-accelerated `io.open`. |
+| **P0** | **Python 3.14+ `asyncio` Startup Crash & Reporter Lockup** | `pyvim/editor_buffer.py:174-217`, `pyvim/window_arrangement.py:403`[^src-editor-buffer][^src-window-arrangement] | Opening any file before `Editor.run()` crashes on Python 3.14+ (`get_event_loop()` raises `RuntimeError` when no loop is running); unnamed buffers permanently lock `_reporter_is_running = True`; non-Python files spawn background executor tasks + extra full-screen redraws on every keystroke. | **0 crashes**, **0 background tasks** for non-`.py` files, debounced `pyflakes` checks. |
+| **P1** | **Per-Keystroke `DocumentLexer` Re-instantiation & Eager EOF Lexing** | `pyvim/lexer.py:19-31`[^src-lexer] | Rebuilds `PygmentsLexer.from_filename()` on every edit and hits `prompt_toolkit`'s eager `list(get_text_fragments())` (`pygments.py:264`), which lexes from `start_lineno` all the way to EOF (`129.51 ms` at top of a 4,000-line `.py` file; `66.07 ms` at line 2,000). | **`1.41 ms`** at top (**~92x faster**), **`3.13 ms`** at line 2,000 (**~21x faster**). |
+| **P2** | **Eager Compilation of All 50 Pygments Colorschemes** | `pyvim/style.py:33-37`, `pyvim/editor.py:80`[^src-style][^src-editor] | `Editor.__init__` calls `generate_built_in_styles()`, importing and compiling all 50 Pygments styles (`22.43 ms` on macOS arm64; `~60 ms` on Linux VMs) even though only `'vim'` is active and `editor.styles` is only used for `:colorscheme` tab-completion names. | **`0.10 ms`** at startup (**>200x faster**). |
+| **P3** | **Singleton & Line-Cached `DocumentWordsCompleter`** | `pyvim/completion.py:12-55`[^src-completion] | `DocumentCompleter` instantiates a fresh `DocumentWordsCompleter()` on every call, and `DocumentWordsCompleter` runs `re.split(r'\W', document.text)` over the entire buffer (`3.11 ms` on 4,000 lines). | **`0.15 ms`** per keystroke (**~20x faster**) via persistent completer instance + cached non-cursor line words + `bisect`. |
+| **P4** | **Per-Frame `ReportingProcessor` & `ReportMessageToolbar` Error Scan** | `pyvim/layout.py:278-288, 637-643`[^src-layout] | Scans `editor_buffer.report_errors` linearly (`O(V \times E)`) on every visible line per frame and calls `explode_text_fragments` inside the inner loop. | **`O(1)` dict lookup** per visible line via `report_errors_by_line`. |
+| **P5** | **`codecs.open` Deprecation (Python 3.14+) & Minor Render/Dirty Cleanups** | `pyvim/io/backends.py:33-57`, `pyvim/editor_buffer.py:74-78`, `pyvim/commands/commands.py:747-750`[^src-backends][^src-commands] | `codecs.open` is officially deprecated in Python 3.14+; `:s` (`substitute`) constructs `Document(new_text)` twice per matched line; `has_unsaved_changes` compares full strings per frame (`~2.4 µs` per 100 KB). | C-accelerated `io.open`, single `Document` construction in `:s`, `O(1)` dirty flag. |
+
+### 1.2 Reproducible Benchmark Output (`python tools/bench_plans.py`)
+
+```text
+Python 3.15.2 (arm64), prompt_toolkit 3.0.53
+
+=== 2. Speed & Latency Plan Micro-Benchmarks ===
+  P1a DocumentLexer (top 40 lines of 4000-line file): current=129.51 ms -> cached+streaming=1.41 ms
+  P1b DocumentLexer (middle 40 lines @ 2000 of 4000-line file): current=66.07 ms -> cached+streaming=3.13 ms
+  P1c DocumentLexer (bottom 40 lines of 4000-line file): current=3.33 ms -> cached+streaming=3.18 ms
+  P2 Style init (50 styles): eager=22.43 ms -> lazy('vim')=0.10 ms
+  P5 DocumentWordsCompleter (4000 lines, typing on current line): fresh=3.11 ms -> singleton_cached=0.150 ms
+```
+
+### 1.3 Recommended Cross-Plan Implementation Order
+
+1. **Step 1 — P0 (`pyvim/editor_buffer.py`, `pyvim/editor.py`)**: Fix the Python 3.14+ startup crash (`get_event_loop()`) and `_reporter_is_running` lockup first, since opening any file via CLI currently crashes on Python 3.14/3.15.
+2. **Step 2 — Thai & Lao Script Support ([`thai_support_plan.md`](thai_support_plan.md))**: Land `pyvim/thai.py` (cell clusters, syllables, `SARA AM` neighbor refresh, and version-gated `prompt_toolkit` hooks) plus `tests/test_thai.py`.
+3. **Step 3 — P1 & P2 (`pyvim/lexer.py`, `pyvim/style.py`)**: Land `_StreamingPygmentsLexer` caching and lazy colorscheme loading.
+4. **Step 4 — P3, P4 & P5 (`pyvim/completion.py`, `pyvim/layout.py`, `pyvim/io/backends.py`, `pyvim/commands/commands.py`)**: Land the persistent line-cached word completer, `O(1)` error line index, and `io.open` replacement.
 
 ---
 
-## 2. Detailed Findings & Engineering Fixes
+## 2. P0: Fix Python 3.14+ `asyncio` Startup Crash, Reporter Lockup & Unnecessary Redraws
 
-### 2.1. [P0] Python 3.15 Startup Crash, Non-Python Redraw Storm & Pyflakes Debouncing
+### Root Cause (`pyvim/editor_buffer.py:174-217`, `pyvim/window_arrangement.py:403`)
 
-**Source**: [`pyvim/editor_buffer.py:174-217`](../pyvim/editor_buffer.py)[^src-editor-buffer] and [`pyvim/window_arrangement.py:403`](../pyvim/window_arrangement.py)[^src-window-arrangement].
+In `pyvim/window_arrangement.py:403`[^src-window-arrangement], `_add_editor_buffer` calls `eb.run_reporter()` synchronously when creating a buffer. During CLI startup (`pyvim foo.py`), `Editor.load_initial_files()` runs **before** `Editor.run()` starts `prompt_toolkit`'s `asyncio` event loop[^src-editor].
+
+Inspecting `EditorBuffer.run_reporter` (`pyvim/editor_buffer.py:174-217`)[^src-editor-buffer] reveals four bugs:
 
 ```python
     def run_reporter(self):
-        " Buffer text changed. "
         if not self._reporter_is_running:
             self._reporter_is_running = True
 
-            text = self.buffer.text
-            self.report_errors = []
-
-            # Don't run reporter when we don't have a location. (We need to
-            # know the filetype, actually.)
+            # Don't run when we don't have a location. (We need a location in
+            # order to know the filetype.)
             if self.location is None:
                 return
-
-            # Better not to access the document in an executor.
-            document = self.buffer.document
-
-            if PTK3:
-                loop = get_event_loop()
+            ...
+            loop = get_event_loop()
 ```
 
-#### Four Compounding Issues in `run_reporter()`
+1. **Crash on Python 3.14 & 3.15**: Calling `asyncio.get_event_loop()` when no event loop is running raises `RuntimeError: There is no current event loop in thread 'MainThread'` (changed in Python 3.14).
+2. **Permanent Lockout on Unnamed Buffers**: When `self.location is None` (e.g., running `pyvim` with no arguments), line 177 sets `self._reporter_is_running = True` and line 185 returns early **without resetting `self._reporter_is_running = False`**. Even after saving the buffer as `:w foo.py`, `run_reporter()` never runs again.
+3. **Critical Fix Requirement on the `except RuntimeError` Path**: When deferring `run_reporter()` because no event loop is running yet, `self._reporter_is_running` **must remain `False`** (only set `self._reporter_is_running = True` *after* `asyncio.get_running_loop()` succeeds), otherwise deferring it would recreate the exact same permanent lockout!
+4. **Background Thread + Full Redraw on Non-Python Files & Un-Debounced Keystrokes**:
+   * `report()` (`pyvim/reporting.py:22-38`)[^src-reporting] only checks `.endswith('.py')` *inside* the executor thread, so editing `.md`, `.json`, or `.txt` files still spawns thread-pool jobs and calls `get_app().invalidate()` on every keystroke.
+   * On `.py` files, `self.report_errors = []` is cleared *before* starting the background check, causing red error lines to flicker on every keystroke.
 
-> [!WARNING]
-> **Critical Bug on Python 3.14+ / 3.15 (`asyncio.get_event_loop()`)**
->
-> In [`run_pyvim.py:46-48`](../pyvim/entry_points/run_pyvim.py), `editor.load_initial_files(locations)` runs **before** `editor.run()`. Opening any file calls `_add_editor_buffer()` $\rightarrow$ `editor_buffer.run_reporter()` $\rightarrow$ `asyncio.get_event_loop()`. In Python 3.14+ and 3.15, `get_event_loop()` raises `RuntimeError: There is no current event loop in thread 'MainThread'` when no loop is running. (The existing test suite missed this because `tests/conftest.py` only called `load_initial_files([])` with `location=None`.)
+### Solution (`pyvim/editor_buffer.py`, `pyvim/editor.py`)
 
-1. **Python 3.15 `RuntimeError` Crash**: Calling `get_event_loop()` before `Application.run()` starts the asyncio loop crashes immediately when launching `pyvim <file>`.
-2. **Permanent Reporter Lockup on Unnamed Buffers**: When `self.location is None` (line 184), `run_reporter()` returns early *after* setting `self._reporter_is_running = True` (line 177). If the user later saves the buffer as `:w script.py`, `self._reporter_is_running` remains `True` forever and `pyflakes` never runs.
-3. **Unnecessary Thread + Redraw Storm on Non-Python Files**: When editing `.md`, `.txt`, `.json`, or `.zig` files, `run_reporter()` still schedules an executor job in the thread pool on every keystroke and calls `get_app().invalidate()` upon completion — forcing a second full-screen redraw on every character typed, even though [`report()`](../pyvim/reporting.py) only checks `.py` files!
-4. **Un-debounced AST Compilation + Flickering Highlights**: While typing in a `.py` file, `self.report_errors = []` clears existing errors on every keystroke (causing error highlights to flicker off until the background thread finishes), and `pyflakes.api.check` parses the entire file's AST on every single keystroke.
+```python
+    def run_reporter(self):
+        """
+        Run diagnostic reporter asynchronously in background executor.
+        """
+        # 1. Fast exit BEFORE touching _reporter_is_running:
+        #    Skip unnamed buffers and non-Python files immediately.
+        if not self.location or not self.location.endswith('.py'):
+            if self.report_errors:
+                self.report_errors = []
+                self.report_errors_by_line = {}
+            return
 
-#### Solution
+        # 2. Acquire the running event loop BEFORE setting _reporter_is_running.
+        #    If called before Application.run() (e.g. CLI startup on Python 3.14+),
+        #    leave _reporter_is_running = False so Editor.run() can trigger it.
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
 
-* Fast-path exit **before** touching `_reporter_is_running` if `not self.location or not self.location.endswith('.py')`.
-* Use `asyncio.get_running_loop()` inside a `try / except RuntimeError` block; if no loop is running yet (during `load_initial_files`), defer or run once the loop is active.
-* Keep the previous `self.report_errors` visible until the new `report_errors` list is ready (eliminating visual flicker), and only call `get_app().invalidate()` if `report_errors` actually changed.
-* Add a lightweight `call_later(0.15, ...)` debounce timer so rapid typing coalesces into a single `pyflakes` AST pass after a 150 ms pause.
+        if self._reporter_is_running:
+            self._run_reporter_again = True
+            return
+
+        self._reporter_is_running = True
+        text = self.buffer.text
+        location = self.location
+
+        def in_executor():
+            return report(text, location)
+
+        def ready(f):
+            self._reporter_is_running = False
+            new_errors = f.result()
+
+            if new_errors != self.report_errors:
+                self.report_errors = new_errors
+                by_line = {}
+                for err in new_errors:
+                    by_line.setdefault(err.lineno, []).append(err)
+                self.report_errors_by_line = by_line
+                get_app().invalidate()
+
+            if self._run_reporter_again:
+                self._run_reporter_again = False
+                self.run_reporter()
+
+        fut = loop.run_in_executor(None, in_executor)
+        fut.add_done_callback(ready)
+```
+
+And in `Editor.run()` (`pyvim/editor.py:257-260`)[^src-editor], trigger `run_reporter()` inside `pre_run()` once the event loop is active:
+```python
+        def pre_run():
+            self.application.vi_state.input_mode = InputMode.NAVIGATION
+            for eb in self.window_arrangement.editor_buffers:
+                eb.run_reporter()
+```
 
 ---
 
-### 2.2. [P1] Cache `PygmentsLexer` Instances Inside `DocumentLexer`
+## 3. P1: Fix Per-Keystroke `DocumentLexer` Re-Instantiation & Eager EOF Lexing
 
-**Source**: [`pyvim/lexer.py:12-32`](../pyvim/lexer.py)[^src-lexer].
+### Root Cause (`pyvim/lexer.py:19-31` & `prompt_toolkit/lexers/pygments.py:253-264`)
 
-```python
-class DocumentLexer(Lexer):
-    def __init__(self, editor_buffer):
-        self.editor_buffer = editor_buffer
+Two compounding issues make syntax highlighting the largest source of keystroke latency on medium-to-large files:
 
-    def lex_document(self, document):
-        location = self.editor_buffer.location
-        if location:
-            if self.editor_buffer.in_file_explorer_mode:
-                return PygmentsLexer(DirectoryListingLexer, sync_from_start=False).lex_document(document)
-            return PygmentsLexer.from_filename(location, sync_from_start=False).lex_document(document)
-        return SimpleLexer().lex_document(document)
-```
+1. **Per-Edit Lexer Re-Instantiation (`pyvim/lexer.py:19-31`)**[^src-lexer]:
+   `DocumentLexer.lex_document(document)` calls `PygmentsLexer.from_filename(location, sync_from_start=False)` on every buffer change, scanning Pygments' global lexer registry (`~0.61 ms` per call) and discarding the `PygmentsLexer` instance.
+2. **Eager Lexing to EOF in `prompt_toolkit`'s `PygmentsLexer` (`prompt_toolkit/lexers/pygments.py:253-264`)**:
+   Inside `PygmentsLexer.lex_document`, `create_line_generator(start_lineno)` runs:
+   ```python
+   def get_text_fragments() -> Iterable[tuple[str, str]]:
+       text = "\n".join(document.lines[start_lineno:])[column:]
+       for _, t, v in self.pygments_lexer.get_tokens_unprocessed(text):
+           yield _token_cache[t], v
 
-#### Why This Hurts Typing Latency
+   yield from enumerate(split_lines(list(get_text_fragments())), start_lineno)
+   ```
+   Because `get_text_fragments()` is wrapped in `list(...)` before being passed to `split_lines(...)` (which itself accepts any lazy `Iterable`), `PygmentsLexer` eagerly tokenizes **every line from `start_lineno` all the way to the end of the file** before yielding a single visible line!
+   * When editing near the **top** of a 4,000-line Python file (`start_lineno = 0`), `list(get_text_fragments())` lexes all 4,000 lines on every keystroke (**`129.51 ms`**).
+   * When editing near the **middle** (`line 2,000` of 4,000, `start_lineno = 1950`), it lexes 2,050 lines on every keystroke (**`66.07 ms`**).
 
-In `prompt_toolkit`, `BufferControl._get_formatted_text_for_line_func` calls `self.lexer.lex_document(document)` whenever `document.text` changes (i.e. on **every keystroke in Insert mode**).
-* `PygmentsLexer` in `prompt_toolkit` is specifically engineered to be **stateful across calls to `lex_document(document)`**: it caches lexed lines and generator states so that editing line 2,000 reuses lines `0..1,999` without re-lexing the top of the file.
-* Because `DocumentLexer.lex_document` constructs a **brand new `PygmentsLexer.from_filename(...)` instance** on every call:
-  1. It scans Pygments' entire lexer registry (`pygments.lexers.get_lexer_for_filename`) on every keystroke.
-  2. It discards `PygmentsLexer`'s internal line cache on every keystroke!
+### Solution (`pyvim/lexer.py`)
 
-#### Solution
+Subclass `PygmentsLexer` inside `pyvim/lexer.py` (`_StreamingPygmentsLexer`) so `create_line_generator` feeds 100-line chunks lazily into `split_lines(get_text_fragments())` without `list(...)`, and cache the lexer instance on `DocumentLexer` per `(location, document.text[:100])`[^src-bench]:
 
-Cache the underlying `Lexer` instance on `DocumentLexer` keyed by `(location, in_file_explorer_mode)`:
-
-```python
-class DocumentLexer(Lexer):
-    def __init__(self, editor_buffer):
-        self.editor_buffer = editor_buffer
-        self._cached_key = None
-        self._cached_lexer = SimpleLexer()
-
-    def lex_document(self, document):
-        eb = self.editor_buffer
-        key = (eb.location, eb.in_file_explorer_mode)
-        if key != self._cached_key:
-            self._cached_key = key
-            if eb.location:
-                if eb.in_file_explorer_mode:
-                    self._cached_lexer = PygmentsLexer(
-                        DirectoryListingLexer, sync_from_start=False)
-                else:
-                    self._cached_lexer = PygmentsLexer.from_filename(
-                        eb.location, sync_from_start=False)
-            else:
-                self._cached_lexer = SimpleLexer()
-        return self._cached_lexer.lex_document(document)
-```
-
-* **Measured Impact on Python 3.15**: Reduces per-keystroke lexing time at line 2,000 from **`2.89 ms` to `1.64 ms` (~43% reduction)**.
+* **Top of 4,000-line `.py` file**: `129.51 ms` $\rightarrow$ **`1.41 ms` (~92x faster)**
+* **Middle (line 2,000) of 4,000-line `.py` file**: `66.07 ms` $\rightarrow$ **`3.13 ms` (~21x faster)**
+* **Bottom of 4,000-line `.py` file**: `3.33 ms` $\rightarrow$ **`3.18 ms`**
 
 ---
 
-### 2.3. [P2] Lazy Colorscheme Loading on Startup
+## 4. P2: Lazy-Load Built-In Pygments Styles
 
-**Source**: [`pyvim/style.py:33-37`](../pyvim/style.py)[^src-style], [`pyvim/editor.py:80-81`](../pyvim/editor.py)[^src-editor], and [`pyvim/commands/completer.py:59`](../pyvim/commands/completer.py)[^src-cmd-completer].
+### Root Cause (`pyvim/style.py:33-37`, `pyvim/editor.py:80-81`)
 
+In `pyvim/editor.py:80-81`[^src-editor]:
 ```python
-# pyvim/editor.py:80-81
 self.styles = generate_built_in_styles()
 self.current_style = get_editor_style_by_name('vim')
 ```
+`generate_built_in_styles()` eagerly imports and compiles all **50** Pygments styles into `Style` objects on startup (`22.43 ms` on macOS arm64; `~60.5 ms` on Linux VMs), even though `self.styles` is only ever used as a list of style names for `:colorscheme` tab completion (`pyvim/commands/completer.py:67`: `WordCompleter(list(editor.styles.keys()))`).
 
-#### Why This Hurts Startup Time
+### Solution (`pyvim/style.py`)
 
-* `generate_built_in_styles()` iterates through all 50 Pygments style plugins (`get_all_styles()`), dynamically imports each module, builds a `Style` object via `style_from_pygments_cls`, and merges it with `style_extensions`.
-* However, `self.styles` is **never used to look up `Style` objects** (`Editor.use_colorscheme` calls `get_editor_style_by_name(name)` directly!). `self.styles` is only iterated in `ColorSchemeCompleter` (`for style_name in self.editor.styles:`) to tab-complete style names!
-
-#### Solution
-
-* Store `self.styles` as a lazy mapping or simple set/tuple of style names (`tuple(get_all_styles()) + ('vim',)`), and cache compiled `Style` instances inside `get_editor_style_by_name(name)` with `@functools.lru_cache`.
-* **Measured Impact on Python 3.15**: Cuts style initialization during `Editor()` startup from **`18.19 ms` to `0.09 ms` (~200x faster)**.
+Populate `self.styles = {name: None for name in pygments.styles.get_all_styles()}` (or a `LazyStyleDict`) so `editor.styles.keys()` returns all 50 scheme names in **`0.10 ms`** while only compiling the active `'vim'` style on startup[^src-bench].
 
 ---
 
-### 2.4. [P3] `O(1)` Dirty-State Tracking (`EditorBuffer.has_unsaved_changes`)
+## 5. P3: Singleton & Line-Cached `DocumentWordsCompleter`
 
-**Source**: [`pyvim/editor_buffer.py:74-78`](../pyvim/editor_buffer.py)[^src-editor-buffer] and [`pyvim/layout.py:77, 344`](../pyvim/layout.py)[^src-layout].
+### Root Cause (`pyvim/completion.py:12-55`)
+
+In `pyvim/completion.py`[^src-completion]:
+1. `DocumentCompleter.get_completions` (line 30) instantiates a brand-new `DocumentWordsCompleter()` on every single completion invocation, so any instance-level cache on `DocumentWordsCompleter` would never hit unless the completer instance is persisted.
+2. `DocumentWordsCompleter.get_completions` runs `re.split(r'\W', document.text)` across the entire file on every keystroke (`3.11 ms` on a 4,000-line file).
+
+### Solution (`pyvim/completion.py`)
+
+1. Instantiate `self._words_completer = DocumentWordsCompleter()` **once** inside `DocumentCompleter.__init__`.
+2. Inside `DocumentWordsCompleter`, cache the sorted unique words from all **non-cursor lines** keyed by `(len(doc_lines), cursor_row, prefix_text, suffix_text)`. While the user is typing on the current line `cursor_row`, `prefix_text` and `suffix_text` are unchanged, so each keystroke only regex-scans `doc_lines[cursor_row]` (1 line) and binary-searches (`bisect.bisect_left`) the pre-sorted `_other_words_sorted` list:
+   * **Measured cost (`tools/bench_plans.py`)**: Drops per-keystroke completion latency on a 4,000-line file from **`3.11 ms` to `0.150 ms` (~20x faster)**[^src-bench].
+
+---
+
+## 6. P4: `O(1)` Line Index for `ReportingProcessor` & `ReportMessageToolbar`
+
+### Root Cause (`pyvim/layout.py:278-288, 637-643`)
+
+In `pyvim/layout.py`[^src-layout]:
+* `ReportingProcessor.apply_transformation` (lines 278-288) loops over `for error in self.editor_buffer.report_errors:` on every visible line of every render frame, and calls `fragments = explode_text_fragments(fragments)` inside the `if error.lineno == ti.lineno:` branch (potentially exploding the line multiple times if a line has multiple errors).
+* `ReportMessageToolbar.get_tokens` (lines 637-643) also scans `report_errors` linearly on every frame.
+* *(Note: `pyvim/reporting.py`'s `translate_row_col_to_index` is already `O(1)` via `Document._line_start_indexes` and only scans `O(word_len)` characters per error in the background executor, so `reporting.py` does not need index changes.)*
+
+### Solution (`pyvim/layout.py`, `pyvim/editor_buffer.py`)
+
+Maintain `self.report_errors_by_line: dict[int, list[ReporterError]]` on `EditorBuffer` (populated once when `ready(f)` receives new errors from the background thread):
 
 ```python
-@property
-def has_unsaved_changes(self):
-    return self._file_content != self.buffer.text
-```
+class ReportingProcessor(Processor):
+    def apply_transformation(self, ti):
+        errors = self.editor_buffer.report_errors_by_line.get(ti.lineno)
+        if not errors:
+            return Transformation(ti.fragments)
 
-#### Why This Hurts Frame Render Latency
-
-* `has_unsaved_changes` is queried on **every single frame render** (every `h`/`j`/`k`/`l` cursor motion) by `WindowStatusBar` and `TabsControl`.
-* When editing a large file where `len(self._file_content) == len(self.buffer.text)` (e.g., after replacing a character with `r`, or after undoing changes so the text equals `_file_content` again but lives in a new `str` allocation), Python compares the entire string buffer byte-by-byte on every cursor movement.
-
-#### Solution
-
-* Maintain a cached `self._has_unsaved_changes = False` boolean on `EditorBuffer`.
-* Recompute `self._has_unsaved_changes = (self._file_content != self.buffer.text)` **only** when `on_text_changed` fires, or in `reload()` / `write()`.
-* Every status-bar and tab-bar render check becomes a `~15 ns` boolean attribute read (`O(1)`).
-
----
-
-### 2.5. [P4] `O(1)` Per-Line Error Indexing in `ReportingProcessor` & `ReportMessageToolbar`
-
-**Source**: [`pyvim/layout.py:278-288, 627-646`](../pyvim/layout.py)[^src-layout] and [`pyvim/reporting.py:65-79`](../pyvim/reporting.py)[^src-reporting].
-
-```python
-# pyvim/layout.py:637-643
-if self.editor_buffer.report_errors:
-    for error in self.editor_buffer.report_errors:
-        if error.lineno == transformation_input.lineno:
-            fragments = explode_text_fragments(fragments)
-            for i in range(error.start_column, error.end_column):
-                if i < len(fragments):
-                    fragments[i] = ('class:flakeserror', fragments[i][1])
-```
-
-#### Why This Hurts Rendering on Files with Lint Warnings
-
-1. For every visible line `V` on screen, `ReportingProcessor` iterates through all `E` errors in `self.editor_buffer.report_errors` (`O(V × E)` per frame).
-2. If a line has multiple pyflakes warnings, `explode_text_fragments(fragments)` is called repeatedly for that same line.
-3. `ReportMessageToolbar` (`layout.py:284`) performs another linear scan over `eb.report_errors` on every frame to find the current cursor line's message.
-4. In [`reporting.py:68-71`](../pyvim/reporting.py), `message_to_reporter_error` calls `document.translate_row_col_to_index` and scans `document.text` instead of scanning `document.lines[lineno]` directly (`frozenset` membership on the single line).
-
-#### Solution
-
-* Store `self.report_errors_by_line = defaultdict(list)` on `EditorBuffer` when the reporter finishes.
-* In `ReportingProcessor.apply_transformation`:
-  ```python
-  line_errors = self.editor_buffer.report_errors_by_line.get(transformation_input.lineno)
-  if line_errors:
-      fragments = explode_text_fragments(fragments)
-      frag_len = len(fragments)
-      for error in line_errors:
-          for i in range(error.start_column, min(error.end_column, frag_len)):
-              fragments[i] = ('class:flakeserror', fragments[i][1])
-  ```
-* In `ReportMessageToolbar`: look up `eb.report_errors_by_line.get(lineno)` in `O(1)`.
-
----
-
-### 2.6. [P5] Cached & Precompiled Word Completion (`pyvim/completion.py`)
-
-**Source**: [`pyvim/completion.py:12-55`](../pyvim/completion.py)[^src-completion].
-
-```python
-class DocumentWordsCompleter(Completer):
-    def get_completions(self, document, complete_event):
-        word_before_cursor = document.get_word_before_cursor()
-        words = set()
-        for w in re.split(r'\W', document.text):
-            if len(w) > 1:
-                if w.startswith(word_before_cursor) and w != word_before_cursor:
-                    words.add(w)
-```
-
-#### Why This Hurts Insert-Mode Latency
-
-* `re.split(r'\W', document.text)` splits the entire file into a Python list of every word and non-word boundary on every completion invocation.
-* `DocumentCompleter.get_completions` instantiates a new `_PythonCompleter(location)` or `DocumentWordsCompleter()` object on every call.
-
-#### Solution
-
-1. Precompile `_WORD_RE = re.compile(r'\w{2,}')` at module level.
-2. Return early if `not word_before_cursor`.
-3. Cache the sorted tuple of unique words for the last `(id(document.text), document.text)` on `DocumentWordsCompleter` (or per buffer), and reuse singletons of `DocumentWordsCompleter` and `_PythonCompleter` on `DocumentCompleter`.
-* **Measured Impact on Python 3.15**: Reduces repeated completion lookup on a 4,000-line file from **`1.55 ms` to `< 0.05 ms` (>30x faster)**.
-
----
-
-### 2.7. [P6] Layout Allocation Cleanup, `:substitute` & Native `io.open`
-
-**Sources**: [`pyvim/layout.py:489-588`](../pyvim/layout.py)[^src-layout], [`pyvim/commands/commands.py:712-756`](../pyvim/commands/commands.py)[^src-commands], and [`pyvim/io/backends.py:33-57`](../pyvim/io/backends.py)[^src-backends].
-
-1. **Avoid Per-Frame `ColorColumn` & `_try_char` Re-evaluation (`pyvim/layout.py`)**:
-   * Cache `[ColorColumn(pos) for pos in self.editor.colorcolumn]` so new `ColorColumn` objects are only allocated when `:set colorcolumn=...` changes.
-   * Cache `_try_char` by `(character, backup, encoding)` via `@functools.lru_cache` so `TabsProcessor` and `get_vertical_border_char()` do not call `.encode(encoding, 'replace')` on every render pass.
-2. **Eliminate Double `Document` Creation & Precompile Regex in `substitute()` (`pyvim/commands/commands.py:723-750`)**:
-   * Precompile `compiled_re = re.compile(search)` once before `buffer.transform_lines(...)` instead of calling `re.sub(search, ...)` per line.
-   * Construct `new_doc = Document(new_text)` once and reuse `new_doc.translate_row_col_to_index(new_cursor_position_row, 0)` instead of instantiating `Document(new_text)` twice on lines 747–749.
-3. **Replace `codecs.open` with Built-in `io.open` (`pyvim/io/backends.py:42, 56`)**:
-   * `codecs.open()` uses pure-Python stream wrappers and is deprecated in Python 3.14/3.15 in favor of C-accelerated built-in `open(location, 'r', encoding=e)`. Replacing `codecs.open` with `io.open` speeds up large file reads/writes by **2x–4x** and avoids Python 3.15 deprecation warnings.
-
----
-
-## 3. Implementation Roadmap
-
-```mermaid
-flowchart LR
-    P0["Step 1 (P0)<br/>Fix asyncio loop crash &<br/>debounce pyflakes in editor_buffer.py"] --> P1["Step 2 (P1 + P2)<br/>Cache PygmentsLexer in lexer.py &<br/>lazy styles in style.py"]
-    P1 --> P3["Step 3 (P3 + P4)<br/>O(1) dirty flag &<br/>O(1) error line dict in layout.py"]
-    P3 --> P5["Step 4 (P5 + P6)<br/>Fast word completer, single Document<br/>in :s, and io.open in backends.py"]
+        fragments = explode_text_fragments(ti.fragments)
+        for error in errors:
+            for i in range(error.start_column, min(error.end_column, len(fragments))):
+                style, char = fragments[i]
+                fragments[i] = (style + ' class:flakerror ', char)
+        return Transformation(fragments)
 ```
 
 ---
 
-[^src-editor]: [`pyvim/editor.py`](../pyvim/editor.py) — Main `Editor` initialization and style loading.
-[^src-editor-buffer]: [`pyvim/editor_buffer.py`](../pyvim/editor_buffer.py) — `EditorBuffer` dirty tracking (`has_unsaved_changes`) and background pyflakes runner (`run_reporter`).
-[^src-window-arrangement]: [`pyvim/window_arrangement.py`](../pyvim/window_arrangement.py) — Buffer lifecycle and `_add_editor_buffer` startup call path.
-[^src-layout]: [`pyvim/layout.py`](../pyvim/layout.py) — `EditorLayout`, `ReportingProcessor`, `ReportMessageToolbar`, `WindowStatusBar`, and `TabsControl`.
-[^src-lexer]: [`pyvim/lexer.py`](../pyvim/lexer.py) — `DocumentLexer` wrapper around `PygmentsLexer` and `SimpleLexer`.
-[^src-reporting]: [`pyvim/reporting.py`](../pyvim/reporting.py) — `report()` and `report_pyflakes()` AST checker.
-[^src-completion]: [`pyvim/completion.py`](../pyvim/completion.py) — `DocumentCompleter`, `DocumentWordsCompleter`, and `_PythonCompleter`.
-[^src-style]: [`pyvim/style.py`](../pyvim/style.py) — `generate_built_in_styles()` and `get_editor_style_by_name()`.
-[^src-cmd-completer]: [`pyvim/commands/completer.py`](../pyvim/commands/completer.py) — `ColorSchemeCompleter` and command grammar completion.
-[^src-commands]: [`pyvim/commands/commands.py`](../pyvim/commands/commands.py) — Ex command handlers and `substitute()`.
-[^src-backends]: [`pyvim/io/backends.py`](../pyvim/io/backends.py) — `FileIO`, `GZipFileIO`, `DirectoryIO`, and `HttpIO`.
+## 7. P5: `codecs.open` Deprecation (Python 3.14+) & Minor Render/Command Cleanups
+
+1. **Replace Deprecated `codecs.open` with `io.open` (`pyvim/io/backends.py:33-57`)**[^src-backends]:
+   Python 3.14 officially deprecated `codecs.open()` ("use `open()` instead of `codecs.open()`"). Replacing `codecs.open(path, ...)` with built-in `io.open(path, ...)` removes the deprecation hazard and uses CPython's C-buffered `BufferedReader`/`TextIOWrapper`.
+2. **Avoid Double `Document(new_text)` Construction in `:s` (`pyvim/commands/commands.py:747-750`)**[^src-commands]:
+   In `substitute()`, each matching line in `:s` constructs `Document(new_text)` twice (once to compute `translate_row_col_to_index(i, 0)`, then again with `cursor_position`). Computing the cursor index from the single `Document(new_text)` cuts `Document` allocations during `:%s` in half. *(Note: Python's `re` module already caches compiled regexes in `re._cache`, so `re.sub` compilation itself is already cached.)*
+3. **Cache `has_unsaved_changes` Boolean (`pyvim/editor_buffer.py:74-78`)**[^src-editor-buffer]:
+   While CPython's equal-length `str != str` is fast (`~2.4 µs` for 100 KB), `has_unsaved_changes` is queried multiple times per frame in `WindowStatusBar` and tab titles. Updating a `self._has_unsaved_changes` flag on `on_text_changed`, `write()`, and `reload()` makes per-frame checks strictly `O(1)`.
+
+---
+
+## References
+
+[^src-editor]: `pyvim/editor.py` (`Editor.__init__`, `Editor.run`) — [../pyvim/editor.py](../pyvim/editor.py)
+[^src-editor-buffer]: `pyvim/editor_buffer.py` (`EditorBuffer.has_unsaved_changes`, `EditorBuffer.run_reporter`) — [../pyvim/editor_buffer.py](../pyvim/editor_buffer.py)
+[^src-window-arrangement]: `pyvim/window_arrangement.py` (`WindowArrangement._add_editor_buffer`) — [../pyvim/window_arrangement.py](../pyvim/window_arrangement.py)
+[^src-layout]: `pyvim/layout.py` (`ReportingProcessor`, `ReportMessageToolbar`, `EditorLayout`) — [../pyvim/layout.py](../pyvim/layout.py)
+[^src-lexer]: `pyvim/lexer.py` (`DocumentLexer.lex_document`) — [../pyvim/lexer.py](../pyvim/lexer.py)
+[^src-reporting]: `pyvim/reporting.py` (`report`) — [../pyvim/reporting.py](../pyvim/reporting.py)
+[^src-completion]: `pyvim/completion.py` (`DocumentCompleter`, `DocumentWordsCompleter`) — [../pyvim/completion.py](../pyvim/completion.py)
+[^src-style]: `pyvim/style.py` (`generate_built_in_styles`, `get_editor_style_by_name`) — [../pyvim/style.py](../pyvim/style.py)
+[^src-commands]: `pyvim/commands/commands.py` (`substitute`) — [../pyvim/commands/commands.py](../pyvim/commands/commands.py)
+[^src-backends]: `pyvim/io/backends.py` (`FileIo`, `GZipFileIo`) — [../pyvim/io/backends.py](../pyvim/io/backends.py)
+[^src-bench]: `tools/bench_plans.py` (Reproducible cell-cluster & latency benchmark script) — [../tools/bench_plans.py](../tools/bench_plans.py)
