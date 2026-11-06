@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 
-import codecs
 import gzip
+import io
 import os
 import six
 from six.moves import urllib
@@ -39,7 +39,7 @@ class FileIO(EditorIO):
         # Try to open this file, using different encodings.
         for e in ENCODINGS:
             try:
-                with codecs.open(location, 'r', e) as f:
+                with io.open(location, 'r', encoding=e) as f:
                     return f.read(), e
             except UnicodeDecodeError:
                 pass  # Try next codec.
@@ -53,7 +53,7 @@ class FileIO(EditorIO):
         """
         location = os.path.expanduser(location)
 
-        with codecs.open(location, 'w', encoding) as f:
+        with io.open(location, 'w', encoding=encoding) as f:
             f.write(text)
 
 

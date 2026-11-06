@@ -279,11 +279,10 @@ class ReportMessageToolbar(ConditionalContainer):
             eb = editor.window_arrangement.active_editor_buffer
 
             lineno = eb.buffer.document.cursor_position_row
-            errors = eb.report_errors
+            errors = eb.report_errors_by_line.get(lineno)
 
-            for e in errors:
-                if e.lineno == lineno:
-                    return e.formatted_text
+            if errors:
+                return errors[0].formatted_text
 
             return []
 
@@ -634,13 +633,20 @@ class ReportingProcessor(Processor):
     def apply_transformation(self, transformation_input): 
         fragments = transformation_input.fragments
 
-        if self.editor_buffer.report_errors:
-            for error in self.editor_buffer.report_errors:
-                if error.lineno == transformation_input.lineno:
-                    fragments = explode_text_fragments(fragments)
-                    for i in range(error.start_column, error.end_column):
-                        if i < len(fragments):
-                            fragments[i] = ('class:flakeserror', fragments[i][1])
+        # O(1) lookup in the error index (populated by
+        # `EditorBuffer.run_reporter`), instead of an O(V x E) scan over all
+        # errors for every visible line on every frame. Both
+        # `TransformationInput.lineno` (the 0-based document row passed by
+        # `BufferControl`) and `ReporterError.lineno` are 0-based.
+        errors = self.editor_buffer.report_errors_by_line.get(
+            transformation_input.lineno)
+
+        if errors:
+            fragments = explode_text_fragments(fragments)
+            for error in errors:
+                for i in range(error.start_column, error.end_column):
+                    if i < len(fragments):
+                        fragments[i] = ('class:flakeserror', fragments[i][1])
 
         return Transformation(fragments)
 

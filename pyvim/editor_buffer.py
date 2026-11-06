@@ -15,7 +15,7 @@ import weakref
 PTK3 = ptk_version.startswith('3.')
 
 if PTK3:
-    from asyncio import get_event_loop
+    import asyncio
 else:
     from prompt_toolkit.eventloop import call_from_executor, run_in_executor
 
@@ -59,23 +59,36 @@ class EditorBuffer(object):
             multiline=True,
             completer=DocumentCompleter(editor, self),
             document=Document(text, 0),
-            on_text_changed=lambda _: self.run_reporter())
+            on_text_changed=self._on_text_changed)
 
-        # List of reporting errors.
+        # List of reporting errors, and index of those errors by line.
         self.report_errors = []
+        self.report_errors_by_line = {}
         self._reporter_is_running = False
+        self._run_reporter_again = False
+
+        # True when some changes are not yet written to file.
+        self._has_unsaved_changes = False
 
     @property
     def editor(self):
         """ Back reference to the Editor. """
         return self._editor_ref()
 
+    def _on_text_changed(self, *args):
+        " Buffer text changed. "
+        # Update the dirty flag once per text change, so that per-frame
+        # `has_unsaved_changes` lookups are O(1).
+        self._has_unsaved_changes = self.buffer.text != self._file_content
+
+        self.run_reporter()
+
     @property
     def has_unsaved_changes(self):
         """
         True when some changes are not yet written to file.
         """
-        return self._file_content != self.buffer.text
+        return self._has_unsaved_changes
 
     @property
     def in_file_explorer_mode(self):
@@ -129,6 +142,7 @@ class EditorBuffer(object):
 
         self.buffer.document = Document(text, cursor_position)
         self._file_content = text
+        self._has_unsaved_changes = False
 
     def write(self, location=None):
         """
@@ -156,6 +170,7 @@ class EditorBuffer(object):
         else:
             # When the save succeeds: update: _file_content.
             self._file_content = self.buffer.text
+            self._has_unsaved_changes = False
 
     def get_display_name(self, short=False):
         """
@@ -173,45 +188,67 @@ class EditorBuffer(object):
 
     def run_reporter(self):
         " Buffer text changed. "
-        if not self._reporter_is_running:
-            self._reporter_is_running = True
+        # 1. Fast exit BEFORE touching _reporter_is_running:
+        #    Skip unnamed buffers and non-Python files immediately. (report()
+        #    in reporting.py only knows how to check .py files.)
+        if not self.location or not self.location.endswith('.py'):
+            if self.report_errors:
+                self.report_errors = []
+                self.report_errors_by_line = {}
+            return
 
-            text = self.buffer.text
-            self.report_errors = []
-
-            # Don't run reporter when we don't have a location. (We need to
-            # know the filetype, actually.)
-            if self.location is None:
+        # 2. Acquire the running event loop BEFORE setting _reporter_is_running.
+        #    If called before Application.run() (e.g. CLI startup on Python
+        #    3.14+, where asyncio.get_event_loop() raises RuntimeError when no
+        #    loop is running), leave _reporter_is_running = False so that
+        #    Editor.run() can trigger the reporter once the loop is active.
+        if PTK3:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
                 return
 
-            # Better not to access the document in an executor.
-            document = self.buffer.document
+        if self._reporter_is_running:
+            self._run_reporter_again = True
+            return
 
-            if PTK3:
-                loop = get_event_loop()
+        self._reporter_is_running = True
+        text = self.buffer.text
+        location = self.location
+        document = self.buffer.document
 
-            def in_executor():
-                # Call reporter
-                report_errors = report(self.location, document)
+        def in_executor():
+            # Call reporter with (location, document), as in reporting.report.
+            report_errors = report(location, document)
 
-                def ready():
-                    self._reporter_is_running = False
+            def ready():
+                self._reporter_is_running = False
 
-                    # If the text has not been changed yet in the meantime, set
-                    # reporter errors. (We were running in another thread.)
-                    if text == self.buffer.text:
+                # If the text has not changed while running in the worker
+                # thread, update report_errors and only invalidate the UI
+                # when the errors actually changed. (report_errors was NOT
+                # cleared before the background check, so unchanged errors
+                # do not cause flicker.)
+                if text == self.buffer.text and not self._run_reporter_again:
+                    if report_errors != self.report_errors:
                         self.report_errors = report_errors
+                        by_line = {}
+                        for err in report_errors:
+                            by_line.setdefault(err.lineno, []).append(err)
+                        self.report_errors_by_line = by_line
                         get_app().invalidate()
-                    else:
-                        # Restart reporter when the text was changed.
-                        self.run_reporter()
-
-                if PTK3:
-                    loop.call_soon_threadsafe(ready)
                 else:
-                    call_from_executor(ready)
+                    self._run_reporter_again = False
+                    self.run_reporter()
 
+            # Dispatch the callback back to the main thread in a thread-safe
+            # way, from the executor thread (never from inside `ready`).
             if PTK3:
-                loop.run_in_executor(None, in_executor)
+                loop.call_soon_threadsafe(ready)
             else:
-                run_in_executor(in_executor)
+                call_from_executor(ready)
+
+        if PTK3:
+            loop.run_in_executor(None, in_executor)
+        else:
+            run_in_executor(in_executor)

@@ -258,6 +258,11 @@ class Editor(object):
             # Start in navigation mode.
             self.application.vi_state.input_mode = InputMode.NAVIGATION
 
+            # Now that the event loop is running, start the reporters that
+            # were deferred at startup (see EditorBuffer.run_reporter).
+            for eb in self.window_arrangement.editor_buffers:
+                eb.run_reporter()
+
         # Run eventloop of prompt_toolkit.
         self.application.run(pre_run=pre_run)
 

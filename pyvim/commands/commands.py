@@ -744,11 +744,17 @@ def substitute(editor, range_start, range_end, search, replace, flags):
     new_cursor_position_row = line_index_iterator[-1]
 
     # update text buffer
-    buffer.document = Document(
-        new_text,
-        Document(new_text).translate_row_col_to_index(new_cursor_position_row, 0),
-    )
-    buffer.cursor_position += buffer.document.get_start_of_line_position(after_whitespace=True)
+    # Construct the `Document` only once: the cursor position (start of the
+    # line + leading whitespace, mirroring `get_start_of_line_position(
+    # after_whitespace=True)`) is computed on that same instance instead of
+    # constructing a second `Document` just to translate row/col to an index.
+    doc = Document(new_text)
+    row = new_cursor_position_row
+    cursor_position = (
+        doc.translate_row_col_to_index(row, 0)
+        + (len(doc.lines[row]) - len(doc.lines[row].lstrip())))
+    buffer.document = doc
+    buffer.cursor_position = cursor_position
     buffer._search(search_state, include_current_position=True)
 
     # update editor state
