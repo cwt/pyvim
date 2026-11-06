@@ -190,33 +190,39 @@ def create_key_bindings(editor):
     # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
     # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
 
+    # Cell-cluster Vi editing and motion overrides (Phase 3):
+    # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
+    # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
+
+    def _delete_cell_clusters(event, backward):
+        "Delete `event.arg` cell clusters before/after the cursor on the current line."
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        if backward:
+            span = col - prev_cell_offset(line, col, event.arg)
+            if span > 0:
+                text = buff.delete_before_cursor(count=span)
+        else:
+            span = next_cell_offset(line, col, event.arg) - col
+            if span > 0:
+                text = buff.delete(count=span)
+        event.app.clipboard.set_text(text)
+
     @kb.add('x', filter=vi_navigation_mode)
     def delete_cell_after_cursor(event):
         """
         Delete `event.arg` cell clusters at/after the cursor on the current line.
         """
-        buff = event.current_buffer
-        doc = buff.document
-        line = doc.current_line
-        col = doc.cursor_position_col
-        span = next_cell_offset(line, col, event.arg) - col
-        if span > 0:
-            text = buff.delete(count=span)
-            event.app.clipboard.set_text(text)
+        _delete_cell_clusters(event, backward=False)
 
     @kb.add('X', filter=vi_navigation_mode)
     def delete_cell_before_cursor(event):
         """
         Delete `event.arg` cell clusters before the cursor on the current line.
         """
-        buff = event.current_buffer
-        doc = buff.document
-        line = doc.current_line
-        col = doc.cursor_position_col
-        span = col - prev_cell_offset(line, col, event.arg)
-        if span > 0:
-            text = buff.delete_before_cursor(count=span)
-            event.app.clipboard.set_text(text)
+        _delete_cell_clusters(event, backward=True)
 
     @kb.add('s', filter=vi_navigation_mode & ~is_read_only)
     def substitute_cell(event):
@@ -279,27 +285,27 @@ def create_key_bindings(editor):
         target_col = prev_cell_offset(line, len(line), 1)
         buff.cursor_position += target_col - doc.cursor_position_col
 
+    def _move_to_end_of_word_cell(event, WORD):
+        "Move cursor to the base character of the last cell cluster of the word."
+        buff = event.current_buffer
+        doc = buff.document
+        end = doc.find_next_word_ending(count=event.arg, WORD=WORD)
+        if end:
+            buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
+
     @kb.add('e', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_word_cell(event):
         """
         Move cursor to the base character of the last cell cluster of the word.
         """
-        buff = event.current_buffer
-        doc = buff.document
-        end = doc.find_next_word_ending(count=event.arg)
-        if end:
-            buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
+        _move_to_end_of_word_cell(event, WORD=False)
 
     @kb.add('E', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_big_word_cell(event):
         """
         Move cursor to the base character of the last cell cluster of the WORD.
         """
-        buff = event.current_buffer
-        doc = buff.document
-        end = doc.find_next_word_ending(count=event.arg, WORD=True)
-        if end:
-            buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
+        _move_to_end_of_word_cell(event, WORD=True)
 
     return kb
 

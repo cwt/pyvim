@@ -528,23 +528,34 @@ def tab_no_expand(editor):
     editor.expand_tab = False
 
 
+def _set_int_option(editor, value, attribute, display_name, minimum):
+    """
+    Shared implementation of the integer-valued `:set` handlers.
+
+    `value is None` displays the current value; invalid input shows vim-like
+    error messages; otherwise the attribute is set when `value >= minimum`.
+    """
+    if value is None:
+        editor.show_message('%s=%i' % (display_name, getattr(editor, attribute)))
+        return
+    try:
+        number = int(value)
+    except ValueError:
+        editor.show_message('Number required after =')
+        return
+    if number < minimum:
+        editor.show_message('Argument must be positive')
+    else:
+        setattr(editor, attribute, number)
+
+
 @set_cmd('tabstop', accepts_value=True)
 @set_cmd('ts', accepts_value=True)
 def tab_stop(editor, value):
     """
     Set tabstop.
     """
-    if value is None:
-        editor.show_message('tabstop=%i' % editor.tabstop)
-    else:
-        try:
-            value = int(value)
-            if value > 0:
-                editor.tabstop = value
-            else:
-                editor.show_message('Argument must be positive')
-        except ValueError:
-            editor.show_message('Number required after =')
+    _set_int_option(editor, value, 'tabstop', 'tabstop', minimum=1)
 
 
 @set_cmd('scrolloff', accepts_value=True)
@@ -553,17 +564,7 @@ def set_scroll_offset(editor, value):
     """
     Set scroll offset.
     """
-    if value is None:
-        editor.show_message('scrolloff=%i' % editor.scroll_offset)
-    else:
-        try:
-            value = int(value)
-            if value >= 0:
-                editor.scroll_offset = value
-            else:
-                editor.show_message('Argument must be positive')
-        except ValueError:
-            editor.show_message('Number required after =')
+    _set_int_option(editor, value, 'scroll_offset', 'scrolloff', minimum=0)
 
 
 @set_cmd('incsearch')

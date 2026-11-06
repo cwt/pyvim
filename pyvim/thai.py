@@ -799,26 +799,35 @@ def _doc_get_cursor_right_position(self: Document, count: int = 1) -> int:
     return next_cell_offset(line, col, count) - col
 
 
+def _vertical_cursor_position(
+    self: Document, target_row: int, preferred_column: int | None = None
+) -> int:
+    """
+    Index delta for moving to `target_row`, snapping the column to the
+    nearest cell-cluster start of the target line (shared by the up/down
+    Document wrappers; docs/bugs/029.md).
+    """
+    column = self.cursor_position_col if preferred_column is None else preferred_column
+    target_line = self.lines[target_row]
+    target_col = snap_to_cell_start(target_line, min(column, len(target_line)))
+    return self.translate_row_col_to_index(target_row, target_col) - self.cursor_position
+
+
 def _doc_get_cursor_up_position(
     self: Document, count: int = 1, preferred_column: int | None = None
 ) -> int:
     assert count >= 1
-    column = self.cursor_position_col if preferred_column is None else preferred_column
-    target_row = max(0, self.cursor_position_row - count)
-    target_line = self.lines[target_row]
-    target_col = snap_to_cell_start(target_line, min(column, len(target_line)))
-    return self.translate_row_col_to_index(target_row, target_col) - self.cursor_position
+    return _vertical_cursor_position(
+        self, max(0, self.cursor_position_row - count), preferred_column
+    )
 
 
 def _doc_get_cursor_down_position(
     self: Document, count: int = 1, preferred_column: int | None = None
 ) -> int:
     assert count >= 1
-    column = self.cursor_position_col if preferred_column is None else preferred_column
     target_row = min(len(self.lines) - 1, self.cursor_position_row + count)
-    target_line = self.lines[target_row]
-    target_col = snap_to_cell_start(target_line, min(column, len(target_line)))
-    return self.translate_row_col_to_index(target_row, target_col) - self.cursor_position
+    return _vertical_cursor_position(self, target_row, preferred_column)
 
 
 def _kp_fix_vi_cursor_position(self: KeyProcessor, event: KeyPressEvent) -> None:
