@@ -731,19 +731,10 @@ def set_colorcolumn(editor, value):
 def substitute(editor, range_start, range_end, search, replace, flags):
     """Substitute /search/ with /replace/ over a range of text"""
 
-    def get_line_index_iterator(cursor_position_row, range_start, range_end):
-        if not range_start:
-            assert not range_end
-            range_start = range_end = cursor_position_row
-        else:
-            range_start = int(range_start) - 1
-            range_end = int(range_end) - 1 if range_end else range_start
-        return range(range_start, range_end + 1)
-
-    def get_transform_callback(search, replace, flags):
+    def substitute_in_line(line):
         SUBSTITUTE_ALL, SUBSTITUTE_ONE = 0, 1
         sub_count = SUBSTITUTE_ALL if 'g' in flags else SUBSTITUTE_ONE
-        return lambda s: re.sub(search, replace, s, count=sub_count)
+        return re.sub(search, replace, line, count=sub_count)
 
     search_state = editor.application.current_search_state
     buffer = editor.current_editor_buffer.buffer
@@ -756,12 +747,34 @@ def substitute(editor, range_start, range_end, search, replace, flags):
     if replace is None:
         replace = editor.last_substitute_text
 
-    line_index_iterator = get_line_index_iterator(cursor_position_row, range_start, range_end)
-    transform_callback = get_transform_callback(search, replace, flags)
-    new_text = buffer.transform_lines(line_index_iterator, transform_callback)
+    # Convert and validate the captured range (docs/bugs/004.md): an
+    # out-of-document range must produce an error message, not an IndexError
+    # crash. vim reports this as `E19: No such line in current buffer`.
+    if not range_start:
+        assert not range_end
+        range_start_row = range_end_row = cursor_position_row
+    else:
+        range_start_row = int(range_start) - 1
+        range_end_row = int(range_end) - 1 if range_end else range_start_row
+    if not 0 <= range_start_row <= range_end_row < len(buffer.document.lines):
+        editor.show_message('E19: No such line in current buffer')
+        return
+    line_numbers = list(range(range_start_row, range_end_row + 1))
 
-    assert len(line_index_iterator) >= 1
-    new_cursor_position_row = line_index_iterator[-1]
+    # Track the last line that actually changed (docs/bugs/015.md): vim
+    # places the cursor on the last *substituted* line, not the last range
+    # line when some lines in the range had no match.
+    buffer_lines = buffer.document.lines
+    last_substituted_row = None
+    for row in line_numbers:
+        if substitute_in_line(buffer_lines[row]) != buffer_lines[row]:
+            last_substituted_row = row
+
+    # `transform_lines` always rebuilds the document (and moves the cursor),
+    # also when every line is unchanged; remember the position for the
+    # no-match case below.
+    original_cursor_position = buffer.cursor_position
+    new_text = buffer.transform_lines(line_numbers, substitute_in_line)
 
     # update text buffer
     # Construct the `Document` only once: the cursor position (start of the
@@ -769,12 +782,15 @@ def substitute(editor, range_start, range_end, search, replace, flags):
     # after_whitespace=True)`) is computed on that same instance instead of
     # constructing a second `Document` just to translate row/col to an index.
     doc = Document(new_text)
-    row = new_cursor_position_row
-    cursor_position = doc.translate_row_col_to_index(row, 0) + (
-        len(doc.lines[row]) - len(doc.lines[row].lstrip())
-    )
     buffer.document = doc
-    buffer.cursor_position = cursor_position
+    if last_substituted_row is None:
+        # No line in the range matched anything: keep the cursor where it was.
+        buffer.cursor_position = min(original_cursor_position, len(new_text))
+    else:
+        row = last_substituted_row
+        buffer.cursor_position = doc.translate_row_col_to_index(row, 0) + (
+            len(doc.lines[row]) - len(doc.lines[row].lstrip())
+        )
     buffer._search(search_state, include_current_position=True)
 
     # update editor state

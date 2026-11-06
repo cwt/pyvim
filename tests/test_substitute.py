@@ -54,12 +54,33 @@ def test_substitute_range(editor, editor_buffer):
     assert 'Rose is red,' in editor_buffer.buffer.text
     assert 'Violet is blue,' in editor_buffer.buffer.text
     assert 'And so are you.' in editor_buffer.buffer.text
-    # FIXME: vim would have set the cursor position on last substituted line
-    #        but we set the cursor position on the end_range even when there
-    #        is not substitution there
-    # assert editor_buffer.buffer.cursor_position \
-    #    == editor_buffer.buffer.text.index('Violet')
-    assert editor_buffer.buffer.cursor_position == editor_buffer.buffer.text.index('Sugar')
+    # The cursor must land on the last *substituted* line (line 2, "Violets
+    # are…"), not the end of the range (docs/bugs/015.md).
+    assert editor_buffer.buffer.cursor_position == editor_buffer.buffer.text.index('Violet')
+
+
+def test_substitute_range_beyond_eof_is_an_error_not_a_crash(editor, editor_buffer):
+    given_sample_text(editor_buffer)
+    text_before = editor_buffer.buffer.text
+    cursor_before = editor_buffer.buffer.cursor_position
+
+    handle_command(editor, ':900s/s are/ is')
+
+    # The out-of-document range reports the vim-like error and changes nothing.
+    assert editor.message == 'E19: No such line in current buffer'
+    assert editor_buffer.buffer.text == text_before
+    assert editor_buffer.buffer.cursor_position == cursor_before
+
+
+def test_substitute_no_match_keeps_cursor(editor, editor_buffer):
+    given_sample_text(editor_buffer, 'Violet\n' * 4)
+    cursor_before = editor_buffer.buffer.cursor_position
+
+    handle_command(editor, ':1,4s/zero/nothing')
+
+    # Nothing matched anywhere in the range: text (and cursor) unchanged.
+    assert editor_buffer.buffer.text == 'Violet\nViolet\nViolet\nViolet\n'
+    assert editor_buffer.buffer.cursor_position == cursor_before
 
 
 def test_substitute_range_boundaries(editor, editor_buffer):
