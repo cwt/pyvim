@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from typing import Any, Dict
 
 from prompt_toolkit.formatted_text.utils import split_lines

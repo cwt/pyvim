@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from prompt_toolkit.completion import Completer, Completion, PathCompleter, WordCompleter
 from prompt_toolkit.contrib.completers.system import SystemCompleter
 from prompt_toolkit.contrib.regular_languages.completion import GrammarCompleter

@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from .commands import call_command_handler, has_command_handler, substitute
 from .grammar import COMMAND_GRAMMAR
 

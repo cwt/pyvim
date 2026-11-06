@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from .grammar import COMMAND_GRAMMAR
 
 __all__ = ('CommandPreviewer',)

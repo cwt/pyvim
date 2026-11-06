@@ -3,8 +3,6 @@ Tests for `pyvim/io/backends.py` (P5: `codecs.open` deprecation removal,
 `FileIO`/`GZipFileIO` behaviour).
 """
 
-from __future__ import unicode_literals
-
 import io
 import warnings
 

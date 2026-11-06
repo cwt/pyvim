@@ -2,8 +2,6 @@
 The actual layout for the renderer.
 """
 
-from __future__ import unicode_literals
-
 import re
 import sys
 from functools import partial

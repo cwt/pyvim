@@ -1,10 +1,9 @@
-from __future__ import print_function, unicode_literals
+from __future__ import print_function
 
 import os
 import re
 from typing import Any, Dict, Set
 
-import six
 from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.document import Document
 
@@ -239,7 +238,7 @@ def buffer_list(editor):
                 ' %3i %-2s %-20s  line %i'
                 % (info.index, char, eb.location, (eb.buffer.document.cursor_position_row + 1))
             )
-        six.moves.input('\nPress ENTER to continue...')
+        input('\nPress ENTER to continue...')
 
     run_in_terminal(handler)
 

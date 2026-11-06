@@ -3,8 +3,6 @@ Tests for `pyvim/layout.py` (P4: O(1) `report_errors_by_line` lookups in
 `ReportingProcessor` and `ReportMessageToolbar`).
 """
 
-from __future__ import unicode_literals
-
 import types
 
 from prompt_toolkit.document import Document

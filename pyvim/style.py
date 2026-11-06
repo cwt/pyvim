@@ -2,8 +2,6 @@
 The styles, for the colorschemes.
 """
 
-from __future__ import unicode_literals
-
 from collections.abc import Mapping
 
 from prompt_toolkit.styles import Style, merge_styles

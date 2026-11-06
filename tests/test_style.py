@@ -2,8 +2,6 @@
 Tests for `pyvim/style.py` (P2: lazy style mapping).
 """
 
-from __future__ import unicode_literals
-
 from collections.abc import Mapping
 
 from pygments.styles import get_all_styles

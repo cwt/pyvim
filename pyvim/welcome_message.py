@@ -2,8 +2,6 @@
 The welcome message. This is displayed when the editor opens without any files.
 """
 
-from __future__ import unicode_literals
-
 import platform
 import sys
 

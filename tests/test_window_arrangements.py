@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from pyvim.window_arrangement import EditorBuffer, VSplit
 
 

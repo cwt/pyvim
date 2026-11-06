@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import bisect
 import re
 import weakref

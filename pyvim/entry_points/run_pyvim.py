@@ -11,8 +11,6 @@ Options:
     -u <pyvimrc> : Use this .pyvimrc file instead.
 """
 
-from __future__ import unicode_literals
-
 import os
 
 import docopt

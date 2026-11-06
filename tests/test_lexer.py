@@ -2,8 +2,6 @@
 Tests for `pyvim/lexer.py` (P1: cached, streaming `DocumentLexer`).
 """
 
-from __future__ import unicode_literals
-
 from prompt_toolkit.document import Document
 from prompt_toolkit.lexers.pygments import PygmentsLexer
 

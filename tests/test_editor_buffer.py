@@ -8,8 +8,6 @@ Tests for `pyvim/editor_buffer.py`:
   - P5: `has_unsaved_changes` is an O(1) cached flag.
 """
 
-from __future__ import unicode_literals
-
 import asyncio
 import time
 

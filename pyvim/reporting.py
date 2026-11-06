@@ -10,12 +10,9 @@ Usage::
     errors = report('location.py', Document('file content'))
 """
 
-from __future__ import unicode_literals
-
 import string
 
 import pyflakes.api
-import six
 
 __all__ = ('report', 'checks_python_file')
 
@@ -51,7 +48,7 @@ def report(location, document):
 
     Returns a list of `ReporterError`.
     """
-    assert isinstance(location, six.string_types)
+    assert isinstance(location, str)
 
     if checks_python_file(location):
         return report_pyflakes(document)

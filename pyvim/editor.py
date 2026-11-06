@@ -8,8 +8,6 @@ Usage::
     e.run()  # Runs the event loop, starts interaction.
 """
 
-from __future__ import unicode_literals
-
 import os
 
 import pygments

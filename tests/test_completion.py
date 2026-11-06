@@ -2,8 +2,6 @@
 Tests for `pyvim/completion.py` (P3: singleton + line-cached word completer).
 """
 
-from __future__ import unicode_literals
-
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 

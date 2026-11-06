@@ -1,26 +1,14 @@
-from __future__ import unicode_literals
-
+import asyncio
 import os
 import weakref
 
-from prompt_toolkit import __version__ as ptk_version
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.document import Document
-from six import string_types
 
 from pyvim.completion import DocumentCompleter
 from pyvim.reporting import checks_python_file, report
 from pyvim.thai import note_document_text
-
-PTK3 = ptk_version.startswith('3.')
-
-if PTK3:
-    import asyncio
-else:
-    # `prompt_toolkit.eventloop` only exists in prompt_toolkit 2.x;
-    # `# type: ignore` because mypy only sees the installed (3.x) package.
-    from prompt_toolkit.eventloop import call_from_executor, run_in_executor  # type: ignore[attr-defined]
 
 __all__ = ('EditorBuffer',)
 
@@ -34,8 +22,8 @@ class EditorBuffer(object):
     """
 
     def __init__(self, editor, location=None, text=None):
-        assert location is None or isinstance(location, string_types)
-        assert text is None or isinstance(text, string_types)
+        assert location is None or isinstance(location, str)
+        assert text is None or isinstance(text, str)
         assert not (location and text)
 
         self._editor_ref = weakref.ref(editor)
@@ -221,14 +209,13 @@ class EditorBuffer(object):
         #    loop is running), leave _reporter_is_running = False so that
         #    Editor.run() can trigger the reporter once the loop is active.
         #
-        #    `loop` is initialized here so both PTK2/PTK3 dispatches below
-        #    see a defined binding regardless of branch (docs/bugs/016.md).
+        #    `loop` is initialized here so all dispatches below see a defined
+        #    binding regardless of branch (docs/bugs/016.md).
         loop = None
-        if PTK3:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
 
         if self._reporter_is_running:
             self._run_reporter_again = True
@@ -265,12 +252,6 @@ class EditorBuffer(object):
 
             # Dispatch the callback back to the main thread in a thread-safe
             # way, from the executor thread (never from inside `ready`).
-            if PTK3:
-                loop.call_soon_threadsafe(ready)
-            else:
-                call_from_executor(ready)
+            loop.call_soon_threadsafe(ready)
 
-        if PTK3:
-            loop.run_in_executor(None, in_executor)
-        else:
-            run_in_executor(in_executor)
+        loop.run_in_executor(None, in_executor)
