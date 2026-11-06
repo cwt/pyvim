@@ -8,8 +8,8 @@ sources:
 verified: machine-confirmed
 generated:
   by: "Antigravity (Gemini 4 Argon)"
-  at: "2026-11-05T18:05:00Z"
-timestamp: 2026-11-05T18:05:00Z
+  at: "2026-11-06T02:44:00Z"
+timestamp: 2026-11-06T02:44:00Z
 ---
 
 # pyvim Documentation Bundle
