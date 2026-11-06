@@ -10,7 +10,7 @@ from prompt_toolkit.document import Document
 from six import string_types
 
 from pyvim.completion import DocumentCompleter
-from pyvim.reporting import report
+from pyvim.reporting import checks_python_file, report
 from pyvim.thai import note_document_text
 
 PTK3 = ptk_version.startswith('3.')
@@ -209,7 +209,7 @@ class EditorBuffer(object):
         # 1. Fast exit BEFORE touching _reporter_is_running:
         #    Skip unnamed buffers and non-Python files immediately. (report()
         #    in reporting.py only knows how to check .py files.)
-        if not self.location or not self.location.endswith('.py'):
+        if not checks_python_file(self.location):
             if self.report_errors:
                 self.report_errors = []
                 self.report_errors_by_line = {}

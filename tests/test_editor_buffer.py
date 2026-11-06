@@ -15,7 +15,7 @@ import time
 
 import pyvim.editor_buffer as editor_buffer_module
 from pyvim.editor_buffer import EditorBuffer
-from pyvim.reporting import ReporterError
+from pyvim.reporting import ReporterError, checks_python_file
 
 
 class _RecordingApp(object):
@@ -53,6 +53,16 @@ def test_run_reporter_without_loop_no_crash_unnamed(editor_buffer):
     # After "saving" the buffer as a file the reporter must be retriable:
     eb.run_reporter()
     assert eb._reporter_is_running is False
+
+
+def test_python_file_gate_is_single_source():
+    # docs/bugs/010.md: `EditorBuffer.run_reporter` and `reporting.report`
+    # must share one `.py` predicate.
+    assert checks_python_file("mod.py") is True
+    assert checks_python_file("mod.pyx") is False
+    assert checks_python_file("mod.txt") is False
+    assert checks_python_file(None) is False
+    assert checks_python_file("") is False
 
 
 def test_open_py_buffer_before_event_loop(editor, tmp_path):

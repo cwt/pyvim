@@ -17,7 +17,19 @@ import string
 import pyflakes.api
 import six
 
-__all__ = ('report',)
+__all__ = ('report', 'checks_python_file')
+
+
+def checks_python_file(location):
+    """
+    Single source of truth for the `.py` gate.
+
+    `EditorBuffer.run_reporter` probes this to avoid spawning background
+    work for non-Python files; `report` uses the same predicate inside the
+    worker thread, so the two sides can never diverge (see docs/bugs/010.md
+    of the findings bundle).
+    """
+    return bool(location) and location.endswith('.py')
 
 
 class ReporterError(object):
@@ -41,7 +53,7 @@ def report(location, document):
     """
     assert isinstance(location, six.string_types)
 
-    if location.endswith('.py'):
+    if checks_python_file(location):
         return report_pyflakes(document)
     else:
         return []
