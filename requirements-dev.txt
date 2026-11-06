@@ -1,0 +1,9 @@
+# Development tools for pyvim (pin the verification toolchain so that the
+# results quoted in docs/ are reproducible inside the project environment):
+#   pytest  - tests/
+#   mypy    - typing baseline checked against the 3.10 floor
+#   ruff    - lint + format
+# Install:  python -m pip install -r requirements-dev.txt
+pytest==9.2.0
+mypy==2.4.1
+ruff==0.17.4
