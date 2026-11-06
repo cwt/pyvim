@@ -388,12 +388,13 @@ class WindowArrangement(object):
         if eb is None:
             self.editor_buffers.append(editor_buffer)
         else:
-            # Append right after the currently active one.
+            # Insert right after the currently active one, matching the
+            # docstring (and vim's `:buffers` ordering).
             try:
                 index = self.editor_buffers.index(self.active_editor_buffer)
             except ValueError:
                 index = 0
-            self.editor_buffers.insert(index, editor_buffer)
+            self.editor_buffers.insert(index + 1, editor_buffer)
 
         # When there are no tabs/windows yet, create one for this buffer.
         if self.tab_pages == []:
