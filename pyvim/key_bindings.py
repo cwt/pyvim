@@ -322,7 +322,7 @@ def create_key_bindings(editor):
 def whitespace_before_cursor_on_line():
     """
     Filter which evaluates to True when the characters before the cursor are
-    whitespace, or we are at the start of te line.
+    whitespace, or we are at the start of the line.
     """
     b = get_app().current_buffer
     before_cursor = b.document.current_line_before_cursor

@@ -81,7 +81,7 @@ class TabPage(object):
 
     def _walk_through_splits(self):
         """
-        Yields (parent_split, child_plit) tuples.
+        Yields (parent_split, child_split) tuples.
         """
 
         def walk(split):
@@ -443,7 +443,7 @@ class WindowArrangement(object):
         is no more window showing them.
 
         This should be called every time when a window is closed, or when the
-        content of a window is replcaed by something new.
+        content of a window is replaced by something new.
         """
         # Get all visible EditorBuffers
         ebs = set()

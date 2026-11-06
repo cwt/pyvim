@@ -141,7 +141,7 @@ class HttpIO(EditorIO):
     """
 
     def can_open_location(cls, location):
-        # We can handle all local directories.
+        # True when the location is an http:// or https:// URL.
         return location.startswith('http://') or location.startswith('https://')
 
     def exists(self, location):

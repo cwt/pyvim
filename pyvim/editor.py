@@ -53,7 +53,7 @@ class Editor(object):
         self.paste_mode = False
         self.show_ruler = True
         self.show_wildmenu = True
-        self.expand_tab = True  # Insect spaces instead of tab characters.
+        self.expand_tab = True  # Insert spaces instead of tab characters.
         self.tabstop = 4  # Number of spaces that a tab character represents.
         self.incsearch = True  # Show matches while typing search string.
         self.ignore_case = False  # Ignore case while searching.

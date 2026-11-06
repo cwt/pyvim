@@ -84,7 +84,7 @@ def location_cmd(name, accepts_force=False):
 
 def cmd(name, accepts_force=False):
     """
-    Decarator that registers a command that doesn't take any parameters.
+    Decorator that registers a command that doesn't take any parameters.
     """
 
     def decorator(func):
@@ -106,7 +106,7 @@ def cmd(name, accepts_force=False):
 
 def set_cmd(name, accepts_value=False):
     """
-    Docorator that registers a ':set'-command.
+    Decorator that registers a ':set'-command.
     """
 
     def decorator(func):
@@ -331,7 +331,7 @@ def write(editor, location, force=False):
     Write file. Returns whether the buffer was written.
     """
     if location and not force and os.path.exists(location):
-        editor.show_message('File exists (add ! to overriwe)')
+        editor.show_message('File exists (add ! to override)')
         return False
     eb = editor.window_arrangement.active_editor_buffer
     if location is None and eb.location is None:
@@ -438,7 +438,7 @@ def cd(editor, location):
 @_cmd('colo')
 def color_scheme(editor, variables):
     """
-    Go to one of the open buffers.
+    Apply a colorscheme by name.
     """
     colorscheme = variables.get('colorscheme')
     if colorscheme:

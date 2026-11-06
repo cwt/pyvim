@@ -22,7 +22,7 @@ def test_w_reports_file_exists_failure(editor, editor_buffer, tmp_path):
 
     handle_command(editor, ':w %s' % existing)
 
-    assert editor.message == 'File exists (add ! to overriwe)'
+    assert editor.message == 'File exists (add ! to override)'
     assert existing.read_text() == 'occupado'
 
 
@@ -40,7 +40,7 @@ def test_wq_quits_only_after_successful_write(editor, editor_buffer, tmp_path, m
 
     # Failed write ("File exists"): stay in the editor.
     handle_command(editor, ':wq %s' % existing)
-    assert editor.message == 'File exists (add ! to overriwe)'
+    assert editor.message == 'File exists (add ! to override)'
     assert exits == []
     assert existing.read_text() == 'occupado'
 

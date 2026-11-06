@@ -431,7 +431,7 @@ class WindowStatusBar(FormattedTextToolbar):
 class WindowStatusBarRuler(ConditionalContainer):
     """
     The right side of the Vim toolbar, showing the location of the cursor in
-    the file, and the vectical scroll percentage.
+    the file, and the vertical scroll percentage.
     """
 
     def __init__(self, editor, buffer_window, buffer):
