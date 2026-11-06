@@ -1,8 +1,22 @@
 from __future__ import unicode_literals
 
 from prompt_toolkit.application import get_app
-from prompt_toolkit.filters import Condition, has_focus, vi_insert_mode, vi_navigation_mode
+from prompt_toolkit.filters import (
+    Condition,
+    has_focus,
+    is_read_only,
+    vi_insert_mode,
+    vi_navigation_mode,
+)
+from prompt_toolkit.filters.app import (
+    vi_replace_single_mode,
+    vi_waiting_for_text_object_mode,
+)
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.vi_state import InputMode
+from prompt_toolkit.keys import Keys
+
+from .thai import next_cell_offset, prev_cell_offset
 
 import os
 
@@ -165,6 +179,125 @@ def create_key_bindings(editor):
         editor.window_arrangement.open_buffer(
             new_path, show_in_current_window=True)
         editor.sync_with_prompt_toolkit()
+
+    # Cell-cluster Vi editing and motion overrides (Phase 3):
+    # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
+    # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
+
+    @kb.add('x', filter=vi_navigation_mode)
+    def delete_cell_after_cursor(event):
+        """
+        Delete `event.arg` cell clusters at/after the cursor on the current line.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        span = next_cell_offset(line, col, event.arg) - col
+        if span > 0:
+            text = buff.delete(count=span)
+            event.app.clipboard.set_text(text)
+
+    @kb.add('X', filter=vi_navigation_mode)
+    def delete_cell_before_cursor(event):
+        """
+        Delete `event.arg` cell clusters before the cursor on the current line.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        span = col - prev_cell_offset(line, col, event.arg)
+        if span > 0:
+            text = buff.delete_before_cursor(count=span)
+            event.app.clipboard.set_text(text)
+
+    @kb.add('s', filter=vi_navigation_mode & ~is_read_only)
+    def substitute_cell(event):
+        """
+        Substitute `event.arg` cell clusters at the cursor and enter insert mode.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        span = next_cell_offset(line, col, event.arg) - col
+        text = buff.delete(count=span) if span > 0 else ''
+        event.app.clipboard.set_text(text)
+        event.app.vi_state.input_mode = InputMode.INSERT
+
+    @kb.add(Keys.Any, filter=vi_replace_single_mode)
+    def replace_single_cell(event):
+        """
+        Replace `event.arg` cell clusters at the cursor position with `event.data`.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        span = next_cell_offset(line, col, event.arg) - col
+        if span > 0:
+            buff.delete(count=span)
+        buff.insert_text(event.data * event.arg, overwrite=False)
+        buff.cursor_position += buff.document.get_cursor_left_position(count=1)
+        event.app.vi_state.input_mode = InputMode.NAVIGATION
+
+    @kb.add('~', filter=vi_navigation_mode)
+    def reverse_case_cell(event):
+        """
+        Swap case of the current cell cluster and advance one cell cluster.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        col = doc.cursor_position_col
+        if col >= len(line):
+            return
+        end_col = next_cell_offset(line, col, 1)
+        span = end_col - col
+        if span > 0:
+            cluster = line[col:end_col]
+            buff.delete(count=span)
+            buff.insert_text(cluster.swapcase(), overwrite=False)
+
+    @kb.add('$', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    def move_to_end_of_line_cell(event):
+        """
+        Move cursor to the start of the last cell cluster on the current line.
+        Operator-pending `$` (`d$`, `c$`, `y$`) remains handled by `vi.py` so
+        that trailing combining marks are included in the operator range.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        line = doc.current_line
+        target_col = prev_cell_offset(line, len(line), 1)
+        buff.cursor_position += target_col - doc.cursor_position_col
+
+    @kb.add('e', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    def move_to_end_of_word_cell(event):
+        """
+        Move cursor to the base character of the last cell cluster of the word.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        end = doc.find_next_word_ending(count=event.arg)
+        if end:
+            buff.cursor_position = prev_cell_offset(
+                doc.text, buff.cursor_position + end, 1
+            )
+
+    @kb.add('E', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    def move_to_end_of_big_word_cell(event):
+        """
+        Move cursor to the base character of the last cell cluster of the WORD.
+        """
+        buff = event.current_buffer
+        doc = buff.document
+        end = doc.find_next_word_ending(count=event.arg, WORD=True)
+        if end:
+            buff.cursor_position = prev_cell_offset(
+                doc.text, buff.cursor_position + end, 1
+            )
 
     return kb
 

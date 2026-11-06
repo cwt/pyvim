@@ -24,6 +24,7 @@ from .help import HELP_TEXT
 from .key_bindings import create_key_bindings
 from .layout import EditorLayout, get_terminal_title
 from .style import generate_built_in_styles, get_editor_style_by_name
+from .thai import install_prompt_toolkit_thai_patches
 from .window_arrangement import WindowArrangement
 from .io import FileIO, DirectoryIO, HttpIO, GZipFileIO
 
@@ -44,6 +45,7 @@ class Editor(object):
     :param output: (Optionally) `prompt_toolkit.output.Output` object.
     """
     def __init__(self, config_directory='~/.pyvim', input=None, output=None):
+        install_prompt_toolkit_thai_patches()
         self.input = input
         self.output = output
 
@@ -186,6 +188,7 @@ class Editor(object):
                 self.previewer.preview(self.command_buffer.text)
         self.command_buffer.on_text_changed += preview
 
+        application.vi_state.input_mode = InputMode.NAVIGATION
         return application
 
     @property
