@@ -28,6 +28,7 @@ import logging
 import re
 import threading
 import unicodedata
+from functools import lru_cache
 from typing import Any, Callable, Pattern
 
 import prompt_toolkit.renderer as ptk_renderer
@@ -493,14 +494,18 @@ _WORD_CHUNK_RE = re.compile(r"([\u0e00-\u0eff]+|[a-zA-Z0-9_]+|[^a-zA-Z0-9_\s\u0e
 _BIG_WORD_CHUNK_RE = re.compile(r"([\u0e00-\u0eff]+|[^\s\u0e00-\u0eff]+)")
 
 
-def _iter_word_spans(text: str, WORD: bool = False) -> list[tuple[int, int]]:
+def _word_spans_for_line(line: str, WORD: bool = False) -> tuple[tuple[int, int], ...]:
     """
-    Partition `text` into `(start, end)` word spans, splitting Thai and Lao runs
-    via `find_thai_word_breaks`.
+    Partition a single line into ``(start, end)`` word spans, splitting Thai
+    and Lao runs via `find_thai_word_breaks`.
+
+    Cached per line (keyed on the line text and ``WORD``): word-level Vi
+    motions and text objects re-scan only the lines they actually touch
+    instead of the whole document on every keypress (see ``docs/bugs/001.md``).
     """
     regex = _BIG_WORD_CHUNK_RE if WORD else _WORD_CHUNK_RE
     spans: list[tuple[int, int]] = []
-    for match in regex.finditer(text):
+    for match in regex.finditer(line):
         m_start = match.start(0)
         m_end = match.end(0)
         chunk = match.group(0)
@@ -513,6 +518,29 @@ def _iter_word_spans(text: str, WORD: bool = False) -> list[tuple[int, int]]:
                     spans.append((b0, b1))
         else:
             spans.append((m_start, m_end))
+    return tuple(spans)
+
+
+# The span cache itself: word motions are pure functions of the (unchanged)
+# line, so an LRU cache gives O(1) re-scans for repeat presses on the same
+# text while using only line-sized keys.
+_word_spans_for_line = lru_cache(maxsize=2048)(_word_spans_for_line)
+
+
+def _iter_word_spans(text: str, WORD: bool = False) -> list[tuple[int, int]]:
+    """
+    Full-document word spans as absolute ``(start, end)`` offsets.
+
+    Composed from the cached per-line spans and kept as the reference
+    implementation (used by the test suite to pin equivalence of the
+    line-local motion walkers against the whole-text scan).
+    """
+    spans: list[tuple[int, int]] = []
+    offset = 0
+    for line in text.split("\n"):
+        for start, end in _word_spans_for_line(line, WORD):
+            spans.append((offset + start, offset + end))
+        offset += len(line) + 1
     return spans
 
 
@@ -529,13 +557,24 @@ def find_next_word_beginning(doc: Document, count: int = 1, WORD: bool = False) 
             return orig(doc, count=count, WORD=WORD)
 
     pos = doc.cursor_position
-    spans = _iter_word_spans(doc.text, WORD=WORD)
+    row = doc.cursor_position_row
+    lines = doc.lines
+
+    # Only spans starting strictly after the cursor qualify; walk the cursor
+    # line first, then forward one line at a time (per-line span cache).
+    line_start = doc.translate_row_col_to_index(row, 0)
     matched = 0
-    for start, _end in spans:
-        if start > pos:
+    for start, _end in _word_spans_for_line(lines[row], WORD):
+        if line_start + start > pos:
             matched += 1
             if matched == count:
-                return start - pos
+                return line_start + start - pos
+    for row in range(row + 1, len(lines)):
+        line_start = doc.translate_row_col_to_index(row, 0)
+        for start, _end in _word_spans_for_line(lines[row], WORD):
+            matched += 1
+            if matched == count:
+                return line_start + start - pos
     return None
 
 
@@ -562,19 +601,30 @@ def find_next_word_ending(
             )
 
     pos = doc.cursor_position
-    text = doc.text
-    spans = _iter_word_spans(text, WORD=WORD)
+    row = doc.cursor_position_row
+    lines = doc.lines
+
+    # A span qualifies when its last cell cluster starts after the cursor
+    # (the Vi `e` text object then subtracts one to rest on that cluster).
+    line_start = doc.translate_row_col_to_index(row, 0)
+    line = lines[row]
     matched = 0
-    for _start, end in spans:
-        last_cell = prev_cell_offset(text, end, 1)
+    for _start, end in _word_spans_for_line(line, WORD):
+        last_cell = line_start + prev_cell_offset(line, end, 1)
         if include_current_position:
-            qualifies = end > pos
+            qualifies = line_start + end > pos
         else:
             qualifies = last_cell > pos
         if qualifies:
             matched += 1
             if matched == count:
-                return end - pos
+                return line_start + end - pos
+    for row in range(row + 1, len(lines)):
+        line_start = doc.translate_row_col_to_index(row, 0)
+        for _start, end in _word_spans_for_line(lines[row], WORD):
+            matched += 1
+            if matched == count:
+                return line_start + end - pos
     return None
 
 
@@ -591,13 +641,24 @@ def find_previous_word_beginning(doc: Document, count: int = 1, WORD: bool = Fal
             return orig(doc, count=count, WORD=WORD)
 
     pos = doc.cursor_position
-    spans = _iter_word_spans(doc.text, WORD=WORD)
+    row = doc.cursor_position_row
+    lines = doc.lines
+
+    # Only spans starting strictly before the cursor qualify; walk the cursor
+    # line first, then backward one line at a time.
+    line_start = doc.translate_row_col_to_index(row, 0)
     matched = 0
-    for start, _end in reversed(spans):
-        if start < pos:
+    for start, _end in reversed(_word_spans_for_line(lines[row], WORD)):
+        if line_start + start < pos:
             matched += 1
             if matched == count:
-                return start - pos
+                return line_start + start - pos
+    for row in range(row - 1, -1, -1):
+        line_start = doc.translate_row_col_to_index(row, 0)
+        for start, _end in reversed(_word_spans_for_line(lines[row], WORD)):
+            matched += 1
+            if matched == count:
+                return line_start + start - pos
     return None
 
 
@@ -631,13 +692,23 @@ def find_previous_word_ending(doc: Document, count: int = 1, WORD: bool = False)
             return orig(doc, count=count, WORD=WORD)
 
     pos = doc.cursor_position
-    spans = _iter_word_spans(doc.text, WORD=WORD)
+    row = doc.cursor_position_row
+    lines = doc.lines
+
+    # A span qualifies when its end is at or before the cursor.
+    line_start = doc.translate_row_col_to_index(row, 0)
     matched = 0
-    for _start, end in reversed(spans):
-        if end <= pos:
+    for _start, end in reversed(_word_spans_for_line(lines[row], WORD)):
+        if line_start + end <= pos:
             matched += 1
             if matched == count:
-                return end - pos
+                return line_start + end - pos
+    for row in range(row - 1, -1, -1):
+        line_start = doc.translate_row_col_to_index(row, 0)
+        for _start, end in reversed(_word_spans_for_line(lines[row], WORD)):
+            matched += 1
+            if matched == count:
+                return line_start + end - pos
     return None
 
 
@@ -677,8 +748,7 @@ def find_boundaries_of_current_word(
                 w_end += 1
         return (w_start - col, w_end - col)
 
-    spans = _iter_word_spans(line, WORD=WORD)
-    for w_start, w_end in spans:
+    for w_start, w_end in _word_spans_for_line(line, WORD):
         if w_start <= col < w_end:
             if include_leading_whitespace:
                 while w_start > 0 and line[w_start - 1].isspace():
