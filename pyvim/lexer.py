@@ -2,8 +2,8 @@ from __future__ import unicode_literals
 
 from typing import Any, Dict
 
-from prompt_toolkit.lexers import Lexer, SimpleLexer, PygmentsLexer
 from prompt_toolkit.formatted_text.utils import split_lines
+from prompt_toolkit.lexers import Lexer, PygmentsLexer, SimpleLexer
 from pygments.lexer import RegexLexer
 from pygments.token import Token
 
@@ -11,13 +11,12 @@ try:
     # Streaming sync support (prompt_toolkit >= 3.0.35, used by P1).
     from prompt_toolkit.lexers.pygments import RegexSync
     from prompt_toolkit.styles.pygments import pygments_token_to_classname
+
     _STREAMING_AVAILABLE = True
 except ImportError:
     _STREAMING_AVAILABLE = False
 
-__all__ = (
-    'DocumentLexer',
-)
+__all__ = ('DocumentLexer',)
 
 # Cache from Pygments token type to prompt_toolkit style class name.
 # (`pygments_token_to_classname` does a chain of `isinstance` checks, which
@@ -44,6 +43,7 @@ class DocumentLexer(Lexer):
     position near the cursor, instead of eagerly tokenizing everything up to
     EOF on every edit.
     """
+
     MIN_LINES_BACKWARDS = 50
     REUSE_GENERATOR_MAX_DISTANCE = 100
 
@@ -54,7 +54,7 @@ class DocumentLexer(Lexer):
         self._syntax_sync = None
 
     def _ensure_lexer(self, location):
-        """ Load/cache the Pygments lexer for this location. """
+        """Load/cache the Pygments lexer for this location."""
         if self._cached_location == location:
             # Already looked up: reuse the result (including a cached miss,
             # so we don't re-scan the Pygments registry on every edit).
@@ -65,7 +65,8 @@ class DocumentLexer(Lexer):
 
         try:
             lexer_inst = get_lexer_for_filename(
-                location, stripnl=False, stripall=False, ensurenl=False)
+                location, stripnl=False, stripall=False, ensurenl=False
+            )
         except ClassNotFound:
             self._cached_location = location
             self._pygments_lexer = None
@@ -85,11 +86,15 @@ class DocumentLexer(Lexer):
 
         if location:
             if getattr(self.editor_buffer, 'in_file_explorer_mode', False):
-                return PygmentsLexer(DirectoryListingLexer, sync_from_start=False).lex_document(document)
+                return PygmentsLexer(DirectoryListingLexer, sync_from_start=False).lex_document(
+                    document
+                )
 
             if not _STREAMING_AVAILABLE:
                 # Fallback for older prompt_toolkit versions.
-                return PygmentsLexer.from_filename(location, sync_from_start=False).lex_document(document)
+                return PygmentsLexer.from_filename(location, sync_from_start=False).lex_document(
+                    document
+                )
 
             if self._cached_location != location or self._pygments_lexer is None:
                 if not self._ensure_lexer(location):
@@ -161,22 +166,21 @@ class DocumentLexer(Lexer):
 
 _DirectoryListing = Token.DirectoryListing
 
+
 class DirectoryListingLexer(RegexLexer):
     """
     Highlighting of directory listings.
     """
+
     name = 'directory-listing'
     tokens = {
         str('root'): [  # Conversion to `str` because of Pygments on Python 2.
             (r'^".*', _DirectoryListing.Header),
-
             (r'^\.\./$', _DirectoryListing.ParentDirectory),
             (r'^\./$', _DirectoryListing.CurrentDirectory),
-
             (r'^[^"].*/$', _DirectoryListing.Directory),
             (r'^[^"].*\.(txt|rst|md)$', _DirectoryListing.Textfile),
             (r'^[^"].*\.(py)$', _DirectoryListing.PythonFile),
-
             (r'^[^"].*\.(pyc|pyd)$', _DirectoryListing.Tempfile),
             (r'^\..*$', _DirectoryListing.Dotfile),
         ]

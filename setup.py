@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import os
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
+
 import pyvim
 
 with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as f:
@@ -16,12 +18,12 @@ setup(
     description='Pure Python Vi Implementation',
     long_description=long_description,
     packages=find_packages('.'),
-    install_requires = [
+    install_requires=[
         'prompt_toolkit>=2.0.0,<3.1.0',
         'six',
-        'pyflakes',        # For Python error reporting.
-        'pygments',        # For the syntax highlighting.
-        'docopt',          # For command line arguments.
+        'pyflakes',  # For Python error reporting.
+        'pygments',  # For the syntax highlighting.
+        'docopt',  # For command line arguments.
     ],
     entry_points={
         'console_scripts': [

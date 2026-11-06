@@ -7,19 +7,19 @@ Tests for `pyvim/editor_buffer.py`:
   - P0: `report_errors_by_line` index is maintained.
   - P5: `has_unsaved_changes` is an O(1) cached flag.
 """
+
 from __future__ import unicode_literals
 
 import asyncio
 import time
 
+import pyvim.editor_buffer as editor_buffer_module
 from pyvim.editor_buffer import EditorBuffer
 from pyvim.reporting import ReporterError
 
-import pyvim.editor_buffer as editor_buffer_module
-
 
 class _RecordingApp(object):
-    """ Stand-in for `prompt_toolkit.application.current.get_app`. """
+    """Stand-in for `prompt_toolkit.application.current.get_app`."""
 
     def __init__(self, counts):
         self.counts = counts
@@ -29,7 +29,7 @@ class _RecordingApp(object):
 
 
 def _install_fake_get_app(monkeypatch):
-    """ Replace `get_app` with a fake that records `invalidate()` calls. """
+    """Replace `get_app` with a fake that records `invalidate()` calls."""
     counts = []
 
     def fake_get_app():
@@ -40,6 +40,7 @@ def _install_fake_get_app(monkeypatch):
 
 
 # --- P0: no running event loop (the CLI-startup crash scenario) -----------
+
 
 def test_run_reporter_without_loop_no_crash_unnamed(editor_buffer):
     # An unnamed buffer (`pyvim` with no arguments) must fast-exit *before*
@@ -90,6 +91,7 @@ def test_run_reporter_non_python_file_skips_background(editor, tmp_path):
 
 
 # --- P0: running event loop (normal in-editor operation) ------------------
+
 
 def test_run_reporter_populates_line_index(editor, tmp_path, monkeypatch):
     p = tmp_path / 'unused.py'
@@ -176,6 +178,7 @@ def test_run_reporter_no_flicker_keeps_old_errors(editor, tmp_path, monkeypatch)
 
 # --- P5: O(1) `has_unsaved_changes` flag ----------------------------------
 
+
 def test_has_unsaved_changes_flag(editor_buffer):
     eb = editor_buffer
     assert eb.has_unsaved_changes is False
@@ -220,6 +223,7 @@ def test_substitute_marks_unsaved_changes(editor, tmp_path):
     assert eb.has_unsaved_changes is False
 
     from pyvim.commands.handler import handle_command
+
     handle_command(editor, ':s/Violet/Rose')
     assert eb.has_unsaved_changes is True
     assert eb.buffer.text == 'Rose is Violet'

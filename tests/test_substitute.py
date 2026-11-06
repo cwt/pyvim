@@ -7,6 +7,7 @@ Sugar is sweet,
     And so are you.
 """.lstrip()
 
+
 def given_sample_text(editor_buffer, text=None):
     editor = editor_buffer.editor
     editor.window_arrangement._add_editor_buffer(editor_buffer)
@@ -15,8 +16,9 @@ def given_sample_text(editor_buffer, text=None):
 
 
 def given_cursor_position(editor_buffer, line_number, column=0):
-    editor_buffer.buffer.cursor_position = \
-        editor_buffer.buffer.document.translate_row_col_to_index(line_number - 1, column)
+    editor_buffer.buffer.cursor_position = editor_buffer.buffer.document.translate_row_col_to_index(
+        line_number - 1, column
+    )
 
 
 def test_substitute_current_line(editor, editor_buffer):
@@ -28,8 +30,7 @@ def test_substitute_current_line(editor, editor_buffer):
     assert 'Roses are red,' in editor_buffer.buffer.text
     assert 'Violet is blue,' in editor_buffer.buffer.text
     assert 'And so are you.' in editor_buffer.buffer.text
-    assert editor_buffer.buffer.cursor_position \
-        == editor_buffer.buffer.text.index('Violet')
+    assert editor_buffer.buffer.cursor_position == editor_buffer.buffer.text.index('Violet')
 
 
 def test_substitute_single_line(editor, editor_buffer):
@@ -41,8 +42,7 @@ def test_substitute_single_line(editor, editor_buffer):
     assert 'Roses are red,' in editor_buffer.buffer.text
     assert 'Violet is blue,' in editor_buffer.buffer.text
     assert 'And so are you.' in editor_buffer.buffer.text
-    assert editor_buffer.buffer.cursor_position \
-        == editor_buffer.buffer.text.index('Violet')
+    assert editor_buffer.buffer.cursor_position == editor_buffer.buffer.text.index('Violet')
 
 
 def test_substitute_range(editor, editor_buffer):
@@ -59,8 +59,7 @@ def test_substitute_range(editor, editor_buffer):
     #        is not substitution there
     # assert editor_buffer.buffer.cursor_position \
     #    == editor_buffer.buffer.text.index('Violet')
-    assert editor_buffer.buffer.cursor_position \
-        == editor_buffer.buffer.text.index('Sugar')
+    assert editor_buffer.buffer.cursor_position == editor_buffer.buffer.text.index('Sugar')
 
 
 def test_substitute_range_boundaries(editor, editor_buffer):
@@ -114,7 +113,9 @@ def test_substitute_without_replacement_text(editor, editor_buffer):
     assert '   \n' in editor_buffer.buffer.text
 
 
-def test_substitute_with_repeat_last_substitution_without_previous_substitution(editor, editor_buffer):
+def test_substitute_with_repeat_last_substitution_without_previous_substitution(
+    editor, editor_buffer
+):
     original_text = 'Violet is blue\n'
     given_sample_text(editor_buffer, original_text)
 

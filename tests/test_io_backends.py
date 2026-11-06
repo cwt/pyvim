@@ -2,6 +2,7 @@
 Tests for `pyvim/io/backends.py` (P5: `codecs.open` deprecation removal,
 `FileIO`/`GZipFileIO` behaviour).
 """
+
 from __future__ import unicode_literals
 
 import io
@@ -45,10 +46,10 @@ def test_fileio_no_deprecation_warning(tmp_path):
         f.write(p, 'plain text', 'utf-8')
         f.read(p)
 
-    deprecations = [w for w in caught if issubclass(w.category,
-                                                    DeprecationWarning)]
-    assert deprecations == [], \
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert deprecations == [], (
         'FileIO read/write must not emit DeprecationWarnings: %r' % deprecations
+    )
 
 
 def test_fileio_uses_io_open(tmp_path, monkeypatch):

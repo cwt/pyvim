@@ -1,15 +1,15 @@
 from __future__ import unicode_literals
+
 from .grammar import COMMAND_GRAMMAR
 
-__all__ = (
-    'CommandPreviewer',
-)
+__all__ = ('CommandPreviewer',)
 
 
 class CommandPreviewer(object):
     """
     Already show the effect of Vi commands before enter is pressed.
     """
+
     def __init__(self, editor):
         self.editor = editor
 
@@ -52,7 +52,7 @@ class CommandPreviewer(object):
         self._apply(input_string)
 
     def _apply(self, input_string):
-        """ Apply command. """
+        """Apply command."""
         e = self.editor
 
         # Parse command.
@@ -100,5 +100,4 @@ class CommandPreviewer(object):
             elif set_option in ('colorcolumn', 'cc'):
                 value = variables.get('set_value', '')
                 if value:
-                    e.colorcolumn = [
-                        int(v) for v in value.split(',') if v.isdigit()]
+                    e.colorcolumn = [int(v) for v in value.split(',') if v.isdigit()]

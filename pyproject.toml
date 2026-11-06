@@ -1,0 +1,24 @@
+# Tool configuration for pyvim.
+#
+# Packaging lives in setup.py; this file holds the shared tool settings
+# (ruff linting + formatting) for the Python 3.10+ codebase.
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["docs", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    # `ruff format` keeps long string literals intact; do not fail lint on them.
+    "E501",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pyvim"]
+
+[tool.ruff.format]
+# Keep the existing mix of single/double quotes instead of rewriting every
+# string in one sweep.
+quote-style = "preserve"

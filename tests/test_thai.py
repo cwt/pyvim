@@ -2,8 +2,10 @@
 Unit tests for Thai (`U+0E00..U+0E7F`) and Lao (`U+0E80..U+0EFF`) script support
 (`pyvim/thai.py`, `pyvim/key_bindings.py`, `pyvim/editor.py`).
 """
+
 from __future__ import annotations
 
+import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.application.current import set_app
 from prompt_toolkit.data_structures import Point, Size
 from prompt_toolkit.document import Document
@@ -16,11 +18,10 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.mouse_handlers import MouseHandlers
 from prompt_toolkit.layout.screen import Char, Screen, WritePosition
 from prompt_toolkit.output import ColorDepth, DummyOutput
-import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.styles import DummyStyle, DummyStyleTransformation
 
-from pyvim.editor import Editor
 import pyvim.thai as thai
+from pyvim.editor import Editor
 from pyvim.thai import (
     _SARA_AM_POISON,
     _THAI_COMBINING_CPS,
@@ -37,9 +38,7 @@ from pyvim.thai import (
     is_thai_base,
     is_thai_combining,
     is_thai_following_vowel,
-    is_thai_leading_vowel,
     is_thai_or_lao,
-    is_thai_right_attaching,
     next_cell_offset,
     prev_cell_offset,
     snap_to_cell_start,
@@ -71,19 +70,41 @@ def _make_editor_with_text(text: str, cursor_position: int = 0) -> Editor:
 def test_all_34_thai_lao_combining_marks() -> None:
     expected_thai = {
         0x0E31,
-        0x0E34, 0x0E35, 0x0E36, 0x0E37,
-        0x0E38, 0x0E39, 0x0E3A,
+        0x0E34,
+        0x0E35,
+        0x0E36,
+        0x0E37,
+        0x0E38,
+        0x0E39,
+        0x0E3A,
         0x0E47,
-        0x0E48, 0x0E49, 0x0E4A, 0x0E4B,
-        0x0E4C, 0x0E4D, 0x0E4E,
+        0x0E48,
+        0x0E49,
+        0x0E4A,
+        0x0E4B,
+        0x0E4C,
+        0x0E4D,
+        0x0E4E,
     }
     expected_lao = {
         0x0EB1,
-        0x0EB4, 0x0EB5, 0x0EB6, 0x0EB7,
-        0x0EB8, 0x0EB9, 0x0EBA, 0x0EBB, 0x0EBC,
+        0x0EB4,
+        0x0EB5,
+        0x0EB6,
+        0x0EB7,
+        0x0EB8,
+        0x0EB9,
+        0x0EBA,
+        0x0EBB,
+        0x0EBC,
         0x0EC7,
-        0x0EC8, 0x0EC9, 0x0ECA, 0x0ECB,
-        0x0ECC, 0x0ECD, 0x0ECE,
+        0x0EC8,
+        0x0EC9,
+        0x0ECA,
+        0x0ECB,
+        0x0ECC,
+        0x0ECD,
+        0x0ECE,
     }
     assert len(expected_thai) == 16
     assert len(expected_lao) == 18

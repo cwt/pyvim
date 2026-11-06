@@ -1,9 +1,10 @@
 from __future__ import unicode_literals
-from prompt_toolkit.completion import Completer, Completion
 
 import bisect
 import re
 import weakref
+
+from prompt_toolkit.completion import Completer, Completion
 
 __all__ = (
     'DocumentCompleter',
@@ -23,6 +24,7 @@ class DocumentWordsCompleter(Completer):
     is most effective as a persistent instance (see `DocumentCompleter`),
     where the cache actually gets a chance to hit.
     """
+
     _WORD_RE = re.compile(r'\w+')
 
     def __init__(self):
@@ -77,6 +79,7 @@ class DocumentCompleter(Completer):
     Depending on the file type and settings, it selects another completer to
     call.
     """
+
     def __init__(self, editor, editor_buffer):
         # (Weakrefs, they are already pointing to us.)
         self._editor_ref = weakref.ref(editor)
@@ -104,6 +107,7 @@ class _PythonCompleter(Completer):
     """
     Wrapper around the Jedi completion engine.
     """
+
     def __init__(self, location):
         self.location = location
 
@@ -115,8 +119,8 @@ class _PythonCompleter(Completer):
                     # jedi >= 0.20: the cursor position moved from the
                     # `Script()` constructor to `Script.complete()`.
                     completions = script.complete(
-                        document.cursor_position_row + 1,
-                        document.cursor_position_col)
+                        document.cursor_position_row + 1, document.cursor_position_col
+                    )
                 else:
                     # jedi < 0.20.
                     completions = script.completions()
@@ -146,13 +150,17 @@ class _PythonCompleter(Completer):
                 pass
             else:
                 for c in completions:
-                    yield Completion(c.name_with_symbols, len(c.complete) - len(c.name_with_symbols),
-                                     display=c.name_with_symbols)
+                    yield Completion(
+                        c.name_with_symbols,
+                        len(c.complete) - len(c.name_with_symbols),
+                        display=c.name_with_symbols,
+                    )
 
     def _get_jedi_script_from_document(self, document):
         import inspect
+
         import jedi  # We keep this import in-line, to improve start-up time.
-                     # Importing Jedi is 'slow'.
+        # Importing Jedi is 'slow'.
 
         # `Script()` accepted `line`/`column` keyword arguments until jedi
         # 0.20; detect which API we are talking to.
@@ -164,7 +172,8 @@ class _PythonCompleter(Completer):
                     document.text,
                     column=document.cursor_position_col,
                     line=document.cursor_position_row + 1,
-                    path=self.location)
+                    path=self.location,
+                )
             else:
                 return jedi.Script(document.text, path=self.location)
         except ValueError:
@@ -181,4 +190,3 @@ class _PythonCompleter(Completer):
         except KeyError:
             # Workaround for a crash when the input is "u'", the start of a unicode string.
             return None
-

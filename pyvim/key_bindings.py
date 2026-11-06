@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+import os
+
 from prompt_toolkit.application import get_app
 from prompt_toolkit.filters import (
     Condition,
@@ -18,11 +20,7 @@ from prompt_toolkit.keys import Keys
 
 from .thai import next_cell_offset, prev_cell_offset
 
-import os
-
-__all__ = (
-    'create_key_bindings',
-)
+__all__ = ('create_key_bindings',)
 
 
 def _current_window_for_event(event):
@@ -45,7 +43,9 @@ def create_key_bindings(editor):
     @Condition
     def vi_buffer_focussed():
         app = get_app()
-        if app.layout.has_focus(editor.search_buffer) or app.layout.has_focus(editor.command_buffer):
+        if app.layout.has_focus(editor.search_buffer) or app.layout.has_focus(
+            editor.command_buffer
+        ):
             return False
         return True
 
@@ -95,8 +95,12 @@ def create_key_bindings(editor):
         """
         editor.enter_command_mode()
 
-    @kb.add('tab', filter=vi_insert_mode &
-            ~has_focus(editor.command_buffer) & whitespace_before_cursor_on_line)
+    @kb.add(
+        'tab',
+        filter=vi_insert_mode
+        & ~has_focus(editor.command_buffer)
+        & whitespace_before_cursor_on_line,
+    )
     def autocomplete_or_indent(event):
         """
         When the 'tab' key is pressed with only whitespace character before the
@@ -110,8 +114,11 @@ def create_key_bindings(editor):
 
     @kb.add('escape', filter=has_focus(editor.command_buffer))
     @kb.add('c-c', filter=has_focus(editor.command_buffer))
-    @kb.add('backspace',
-        filter=has_focus(editor.command_buffer) & Condition(lambda: editor.command_buffer.text == ''))
+    @kb.add(
+        'backspace',
+        filter=has_focus(editor.command_buffer)
+        & Condition(lambda: editor.command_buffer.text == ''),
+    )
     def leave_command_mode(event):
         """
         Leaving command mode.
@@ -155,8 +162,9 @@ def create_key_bindings(editor):
 
     @Condition
     def in_file_explorer_mode():
-        return bool(editor.current_editor_buffer and
-            editor.current_editor_buffer.in_file_explorer_mode)
+        return bool(
+            editor.current_editor_buffer and editor.current_editor_buffer.in_file_explorer_mode
+        )
 
     @kb.add('enter', filter=in_file_explorer_mode)
     def open_path(event):
@@ -164,20 +172,18 @@ def create_key_bindings(editor):
         Open file/directory in file explorer mode.
         """
         name_under_cursor = event.current_buffer.document.current_line
-        new_path = os.path.normpath(os.path.join(
-            editor.current_editor_buffer.location, name_under_cursor))
+        new_path = os.path.normpath(
+            os.path.join(editor.current_editor_buffer.location, name_under_cursor)
+        )
 
-        editor.window_arrangement.open_buffer(
-            new_path, show_in_current_window=True)
+        editor.window_arrangement.open_buffer(new_path, show_in_current_window=True)
         editor.sync_with_prompt_toolkit()
 
     @kb.add('-', filter=in_file_explorer_mode)
     def to_parent_directory(event):
-        new_path = os.path.normpath(os.path.join(
-            editor.current_editor_buffer.location, '..'))
+        new_path = os.path.normpath(os.path.join(editor.current_editor_buffer.location, '..'))
 
-        editor.window_arrangement.open_buffer(
-            new_path, show_in_current_window=True)
+        editor.window_arrangement.open_buffer(new_path, show_in_current_window=True)
         editor.sync_with_prompt_toolkit()
 
     # Cell-cluster Vi editing and motion overrides (Phase 3):
@@ -282,9 +288,7 @@ def create_key_bindings(editor):
         doc = buff.document
         end = doc.find_next_word_ending(count=event.arg)
         if end:
-            buff.cursor_position = prev_cell_offset(
-                doc.text, buff.cursor_position + end, 1
-            )
+            buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
 
     @kb.add('E', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_big_word_cell(event):
@@ -295,9 +299,7 @@ def create_key_bindings(editor):
         doc = buff.document
         end = doc.find_next_word_ending(count=event.arg, WORD=True)
         if end:
-            buff.cursor_position = prev_cell_offset(
-                doc.text, buff.cursor_position + end, 1
-            )
+            buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
 
     return kb
 

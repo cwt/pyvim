@@ -8,16 +8,17 @@ Reproducible verification & micro-benchmarks backing the OKF v0.2 plans in docs/
 Run with:
     python tools/bench_plans.py
 """
+
 from __future__ import annotations
 
 import bisect
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 import importlib
 import platform
 import re
 import time
-from typing import Any
 import unicodedata
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from typing import Any
 
 import prompt_toolkit
 from prompt_toolkit.completion import CompleteEvent, Completion
@@ -29,29 +30,52 @@ from prompt_toolkit.lexers.pygments import PygmentsLexer, RegexSync, SyntaxSync
 from prompt_toolkit.styles.pygments import pygments_token_to_classname
 from prompt_toolkit.utils import get_cwidth
 
-
 # ---------------------------------------------------------------------------
 # 1. Reference Thai & Lao cell-cluster / syllable helpers (docs/thai_support_plan.md)
 # ---------------------------------------------------------------------------
 
 # Complete 34-codepoint set of Thai (16) and Lao (18) GC=Mn combining marks,
 # matching `szn/src/thai.zig:28-70` (`isThaiCombining`).
-_THAI_COMBINING_CPS: frozenset[int] = frozenset({
-    # Thai combining marks (16 marks: U+0E31, U+0E34..U+0E3A, U+0E47..U+0E4E)
-    0x0E31,                                     # MAI HAN-AKAT
-    0x0E34, 0x0E35, 0x0E36, 0x0E37,             # SARA I, II, UE, UEE
-    0x0E38, 0x0E39, 0x0E3A,                     # SARA U, UU, PHINTHU
-    0x0E47,                                     # MAITAIKHU
-    0x0E48, 0x0E49, 0x0E4A, 0x0E4B,             # MAI EK, THO, TRI, CHATTAWA
-    0x0E4C, 0x0E4D, 0x0E4E,                     # THANTHAKHAT, NIKHAHIT, YAMAKKAN
-    # Lao combining marks (18 marks: U+0EB1, U+0EB4..0x0EBC, 0x0EC7..0x0ECE)
-    0x0EB1,                                     # MAI KAN
-    0x0EB4, 0x0EB5, 0x0EB6, 0x0EB7,             # SARA I, II, Y, YY
-    0x0EB8, 0x0EB9, 0x0EBA, 0x0EBB, 0x0EBC,     # SARA U, UU, PALI VIRAMA, MAI KON, LO
-    0x0EC7,                                     # MAITAIKHU
-    0x0EC8, 0x0EC9, 0x0ECA, 0x0ECB,             # MAI EK, THO, TI, CATAWA
-    0x0ECC, 0x0ECD, 0x0ECE,                     # CANCELLATION MARK, NIKHAHIT, YAMAKKAN
-})
+_THAI_COMBINING_CPS: frozenset[int] = frozenset(
+    {
+        # Thai combining marks (16 marks: U+0E31, U+0E34..U+0E3A, U+0E47..U+0E4E)
+        0x0E31,  # MAI HAN-AKAT
+        0x0E34,
+        0x0E35,
+        0x0E36,
+        0x0E37,  # SARA I, II, UE, UEE
+        0x0E38,
+        0x0E39,
+        0x0E3A,  # SARA U, UU, PHINTHU
+        0x0E47,  # MAITAIKHU
+        0x0E48,
+        0x0E49,
+        0x0E4A,
+        0x0E4B,  # MAI EK, THO, TRI, CHATTAWA
+        0x0E4C,
+        0x0E4D,
+        0x0E4E,  # THANTHAKHAT, NIKHAHIT, YAMAKKAN
+        # Lao combining marks (18 marks: U+0EB1, U+0EB4..0x0EBC, 0x0EC7..0x0ECE)
+        0x0EB1,  # MAI KAN
+        0x0EB4,
+        0x0EB5,
+        0x0EB6,
+        0x0EB7,  # SARA I, II, Y, YY
+        0x0EB8,
+        0x0EB9,
+        0x0EBA,
+        0x0EBB,
+        0x0EBC,  # SARA U, UU, PALI VIRAMA, MAI KON, LO
+        0x0EC7,  # MAITAIKHU
+        0x0EC8,
+        0x0EC9,
+        0x0ECA,
+        0x0ECB,  # MAI EK, THO, TI, CATAWA
+        0x0ECC,
+        0x0ECD,
+        0x0ECE,  # CANCELLATION MARK, NIKHAHIT, YAMAKKAN
+    }
+)
 
 
 def is_thai_or_lao(cp: int) -> bool:
@@ -81,8 +105,15 @@ def is_thai_leading_vowel(cp: int) -> bool:
 
 def is_thai_following_vowel(cp: int) -> bool:
     return cp in (
-        0x0E30, 0x0E31, 0x0E32, 0x0E33, 0x0E45,
-        0x0EB0, 0x0EB1, 0x0EB2, 0x0EB3,
+        0x0E30,
+        0x0E31,
+        0x0E32,
+        0x0E33,
+        0x0E45,
+        0x0EB0,
+        0x0EB1,
+        0x0EB2,
+        0x0EB3,
     )
 
 
@@ -247,9 +278,7 @@ class _PublicStreamingDocumentLexer(Lexer):
     def lex_document(self, document: Document) -> Callable[[int], StyleAndTextTuples]:
         location = self.editor_buffer.location
         if not location or not self._ensure_lexer(location):
-            fallback: Callable[[int], StyleAndTextTuples] = SimpleLexer().lex_document(
-                document
-            )
+            fallback: Callable[[int], StyleAndTextTuples] = SimpleLexer().lex_document(document)
             return fallback
 
         pygments_lexer = self._pygments_lexer
@@ -260,9 +289,7 @@ class _PublicStreamingDocumentLexer(Lexer):
         cache: dict[int, StyleAndTextTuples] = {}
         line_generators: dict[LineGenerator, int] = {}
 
-        def create_line_generator(
-            start_lineno: int, column: int = 0
-        ) -> LineGenerator:
+        def create_line_generator(start_lineno: int, column: int = 0) -> LineGenerator:
             def get_text_fragments() -> Iterable[tuple[str, str]]:
                 text = "\n".join(document.lines[start_lineno:])[column:]
                 for _, t, v in pygments_lexer.get_tokens_unprocessed(text):
@@ -409,10 +436,10 @@ def bench_thai_plan() -> None:
         ("เกาะ", [0, 1, 2, 3, 4], 4),
         ("น้ำ", [0, 2, 3], 3),
         ("กำ", [0, 1, 2], 2),
-        ("ธรรม", [0, 1, 2, 3, 4], 3),      # Ro Han (ธรร = 3 codepoints, followed by ม)
-        ("ดีๆ", [0, 2, 3], 3),              # Right-attaching ๆ attached to preceding syllable ดี
-        ("ๆฯ", [0, 1, 2], 1),               # Standalone right-attaching symbols
-        ("ທີ່ດິນ", [0, 3, 5, 6], 3),        # Lao: ທ + ◌ີ + ◌່ | ດ + ◌ິ | ນ
+        ("ธรรม", [0, 1, 2, 3, 4], 3),  # Ro Han (ธรร = 3 codepoints, followed by ม)
+        ("ดีๆ", [0, 2, 3], 3),  # Right-attaching ๆ attached to preceding syllable ดี
+        ("ๆฯ", [0, 1, 2], 1),  # Standalone right-attaching symbols
+        ("ທີ່ດິນ", [0, 3, 5, 6], 3),  # Lao: ທ + ◌ີ + ◌່ | ດ + ◌ິ | ນ
     ]
     for word, expected_stops, expected_first_cluster_end in samples:
         actual = cell_stops(word)
@@ -423,13 +450,15 @@ def bench_thai_plan() -> None:
         while c > 0:
             c = prev_cell_offset(word, c, 1)
             rev_starts.append(c)
-        assert rev_starts[::-1] == actual[:-1], f"{word}: reverse starts {rev_starts[::-1]} != {actual[:-1]}"
+        assert rev_starts[::-1] == actual[:-1], (
+            f"{word}: reverse starts {rev_starts[::-1]} != {actual[:-1]}"
+        )
         cluster_end = find_thai_cluster_end(word, 0)
         assert cluster_end == expected_first_cluster_end, (
             f"{word}: expected first syllable end {expected_first_cluster_end}, got {cluster_end}"
         )
         print(
-            f"  {word!r:<10} len={len(word)} cells={len(actual)-1} "
+            f"  {word!r:<10} len={len(word)} cells={len(actual) - 1} "
             f"cell_starts={actual[:-1]} stops={actual} first_syllable_end={cluster_end}"
         )
 
@@ -501,7 +530,9 @@ def bench_speed_plan() -> None:
     ref_get_line = PygmentsLexer.from_filename("sample.py", sync_from_start=False).lex_document(doc)
     stream_get_line = streaming_lexer.lex_document(doc)
     for row in range(75, 140):
-        assert stream_get_line(row) == ref_get_line(row), f"Token mismatch at multiline string row {row}"
+        assert stream_get_line(row) == ref_get_line(row), (
+            f"Token mismatch at multiline string row {row}"
+        )
     print("  Verified P1 multiline docstring token parity (lines 75..140): PASS")
 
     # P1a: Top 40 lines of 4,000-line file

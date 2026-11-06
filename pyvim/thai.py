@@ -18,6 +18,7 @@ Adapts the cell-cluster and differential renderer architecture from `szn`
    whenever Thai/Lao `SARA AM` (`U+0E33` / `U+0EB3`) or its preceding consonant
    at `x - 1` changes.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,14 +27,14 @@ import inspect
 import logging
 import re
 import threading
-from typing import Any, Callable, Pattern
 import unicodedata
+from typing import Any, Callable, Pattern
 
+import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters.app import vi_navigation_mode
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent, KeyProcessor
 from prompt_toolkit.layout.screen import Char, Screen
-import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.utils import get_cwidth
 
 __all__ = (
@@ -74,32 +75,69 @@ logger = logging.getLogger(__name__)
 # Complete 34-codepoint set of Thai (16) and Lao (18) GC=Mn combining marks,
 # matching `szn/src/thai.zig:28-70` (`isThaiCombining`) 1-for-1.
 # Note: SARA AM (U+0E33 / U+0EB3) is GC=Lo (spacing following vowel, width 1), NOT Mn.
-_THAI_COMBINING_CPS: frozenset[int] = frozenset({
-    # Thai combining marks (16 marks: U+0E31, U+0E34..U+0E3A, U+0E47..U+0E4E)
-    0x0E31,                                     # MAI HAN-AKAT
-    0x0E34, 0x0E35, 0x0E36, 0x0E37,             # SARA I, II, UE, UEE
-    0x0E38, 0x0E39, 0x0E3A,                     # SARA U, UU, PHINTHU
-    0x0E47,                                     # MAITAIKHU
-    0x0E48, 0x0E49, 0x0E4A, 0x0E4B,             # MAI EK, THO, TRI, CHATTAWA
-    0x0E4C, 0x0E4D, 0x0E4E,                     # THANTHAKHAT, NIKHAHIT, YAMAKKAN
-    # Lao combining marks (18 marks: U+0EB1, U+0EB4..U+0EBC, U+0EC7..U+0ECE)
-    0x0EB1,                                     # MAI KAN
-    0x0EB4, 0x0EB5, 0x0EB6, 0x0EB7,             # SARA I, II, Y, YY
-    0x0EB8, 0x0EB9, 0x0EBA, 0x0EBB, 0x0EBC,     # SARA U, UU, PALI VIRAMA, MAI KON, LO
-    0x0EC7,                                     # MAITAIKHU
-    0x0EC8, 0x0EC9, 0x0ECA, 0x0ECB,             # MAI EK, THO, TI, CATAWA
-    0x0ECC, 0x0ECD, 0x0ECE,                     # CANCELLATION MARK, NIKHAHIT, YAMAKKAN
-})
+_THAI_COMBINING_CPS: frozenset[int] = frozenset(
+    {
+        # Thai combining marks (16 marks: U+0E31, U+0E34..U+0E3A, U+0E47..U+0E4E)
+        0x0E31,  # MAI HAN-AKAT
+        0x0E34,
+        0x0E35,
+        0x0E36,
+        0x0E37,  # SARA I, II, UE, UEE
+        0x0E38,
+        0x0E39,
+        0x0E3A,  # SARA U, UU, PHINTHU
+        0x0E47,  # MAITAIKHU
+        0x0E48,
+        0x0E49,
+        0x0E4A,
+        0x0E4B,  # MAI EK, THO, TRI, CHATTAWA
+        0x0E4C,
+        0x0E4D,
+        0x0E4E,  # THANTHAKHAT, NIKHAHIT, YAMAKKAN
+        # Lao combining marks (18 marks: U+0EB1, U+0EB4..U+0EBC, U+0EC7..U+0ECE)
+        0x0EB1,  # MAI KAN
+        0x0EB4,
+        0x0EB5,
+        0x0EB6,
+        0x0EB7,  # SARA I, II, Y, YY
+        0x0EB8,
+        0x0EB9,
+        0x0EBA,
+        0x0EBB,
+        0x0EBC,  # SARA U, UU, PALI VIRAMA, MAI KON, LO
+        0x0EC7,  # MAITAIKHU
+        0x0EC8,
+        0x0EC9,
+        0x0ECA,
+        0x0ECB,  # MAI EK, THO, TI, CATAWA
+        0x0ECC,
+        0x0ECD,
+        0x0ECE,  # CANCELLATION MARK, NIKHAHIT, YAMAKKAN
+    }
+)
 
-_FOLLOWING_VOWEL_CPS: frozenset[int] = frozenset({
-    0x0E30, 0x0E31, 0x0E32, 0x0E33, 0x0E45,     # Thai: ะ, ◌ั, า, ำ, ๅ
-    0x0EB0, 0x0EB1, 0x0EB2, 0x0EB3,             # Lao:  ະ, ◌ັ, າ, ຳ
-})
+_FOLLOWING_VOWEL_CPS: frozenset[int] = frozenset(
+    {
+        0x0E30,
+        0x0E31,
+        0x0E32,
+        0x0E33,
+        0x0E45,  # Thai: ะ, ◌ั, า, ำ, ๅ
+        0x0EB0,
+        0x0EB1,
+        0x0EB2,
+        0x0EB3,  # Lao:  ະ, ◌ັ, າ, ຳ
+    }
+)
 
-_RIGHT_ATTACHING_CPS: frozenset[int] = frozenset({
-    0x0E2F, 0x0E46,                             # Thai: ฯ (PAIYANNOI), ๆ (MAI YAMOK)
-    0x0EAF, 0x0EC6,                             # Lao:  ຯ (ELLIPSIS),  ໆ (KO LA)
-})
+_RIGHT_ATTACHING_CPS: frozenset[int] = frozenset(
+    {
+        0x0E2F,
+        0x0E46,  # Thai: ฯ (PAIYANNOI), ๆ (MAI YAMOK)
+        0x0EAF,
+        0x0EC6,  # Lao:  ຯ (ELLIPSIS),  ໆ (KO LA)
+    }
+)
 
 
 def is_thai(cp: int) -> bool:
@@ -301,9 +339,7 @@ class _LibThaiWrapper:
         codepoints = (ctypes.c_uint32 * (n + 1))(*(ord(ch) for ch in text), 0)
         pos_buf = (ctypes.c_int * n)()
         with self._call_lock:
-            num_breaks = int(
-                self._lib.th_brk_wc_find_breaks(self._brk, codepoints, pos_buf, n)
-            )
+            num_breaks = int(self._lib.th_brk_wc_find_breaks(self._brk, codepoints, pos_buf, n))
         if num_breaks <= 0:
             return []
 
@@ -453,9 +489,7 @@ def find_thai_word_breaks(text: str, use_libthai: bool = True) -> list[int]:
     return [0, *_cluster_breaks_for_span(text, 0, n)]
 
 
-_WORD_CHUNK_RE = re.compile(
-    r"([\u0e00-\u0eff]+|[a-zA-Z0-9_]+|[^a-zA-Z0-9_\s\u0e00-\u0eff]+)"
-)
+_WORD_CHUNK_RE = re.compile(r"([\u0e00-\u0eff]+|[a-zA-Z0-9_]+|[^a-zA-Z0-9_\s\u0e00-\u0eff]+)")
 _BIG_WORD_CHUNK_RE = re.compile(r"([\u0e00-\u0eff]+|[^\s\u0e00-\u0eff]+)")
 
 
@@ -482,9 +516,7 @@ def _iter_word_spans(text: str, WORD: bool = False) -> list[tuple[int, int]]:
     return spans
 
 
-def find_next_word_beginning(
-    doc: Document, count: int = 1, WORD: bool = False
-) -> int | None:
+def find_next_word_beginning(doc: Document, count: int = 1, WORD: bool = False) -> int | None:
     """
     Thai/Lao-aware replacement for `Document.find_next_word_beginning`.
     Returns an offset relative to `doc.cursor_position`, or `None`.
@@ -546,9 +578,7 @@ def find_next_word_ending(
     return None
 
 
-def find_previous_word_beginning(
-    doc: Document, count: int = 1, WORD: bool = False
-) -> int | None:
+def find_previous_word_beginning(doc: Document, count: int = 1, WORD: bool = False) -> int | None:
     """
     Thai/Lao-aware replacement for `Document.find_previous_word_beginning`.
     Returns an offset relative to `doc.cursor_position`, or `None`.
@@ -588,9 +618,7 @@ def find_start_of_previous_word(
     return find_previous_word_beginning(doc, count=count, WORD=WORD)
 
 
-def find_previous_word_ending(
-    doc: Document, count: int = 1, WORD: bool = False
-) -> int | None:
+def find_previous_word_ending(doc: Document, count: int = 1, WORD: bool = False) -> int | None:
     """
     Thai/Lao-aware replacement for `Document.find_previous_word_ending`
     (used by Vi `ge`/`gE`).
@@ -800,10 +828,13 @@ def _sanitize_and_invalidate_sara_am(
         if previous_screen is None or y not in previous_screen.data_buffer:
             continue
         prev_row = previous_screen.data_buffer[y]
-        row_max_x = max(
-            max(new_row.keys(), default=0),
-            max(prev_row.keys(), default=0),
-        ) + 1
+        row_max_x = (
+            max(
+                max(new_row.keys(), default=0),
+                max(prev_row.keys(), default=0),
+            )
+            + 1
+        )
         max_x = min(width, row_max_x)
 
         for x in range(1, max_x):

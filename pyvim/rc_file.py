@@ -5,20 +5,21 @@ A pyvim configuration file is just a Python file that contains a global
 `configure` function. During startup, that function will be called with the
 editor instance as an argument.
 """
-from __future__ import unicode_literals, print_function
 
-from .editor import Editor
+from __future__ import print_function, unicode_literals
 
-import six
 import os
 import traceback
 
-__all__ = (
-    'run_rc_file',
-)
+import six
+
+from .editor import Editor
+
+__all__ = ('run_rc_file',)
+
 
 def _press_enter_to_continue():
-    """ Wait for the user to press enter. """
+    """Wait for the user to press enter."""
     six.moves.input('\nPress ENTER to continue...')
 
 
@@ -51,7 +52,7 @@ def run_rc_file(editor, rc_file):
         if 'configure' in namespace:
             namespace['configure'](editor)
 
-    except Exception as e:
+    except Exception:
         # Handle possible exceptions in rc file.
         traceback.print_exc()
         _press_enter_to_continue()

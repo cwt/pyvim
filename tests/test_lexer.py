@@ -1,6 +1,7 @@
 """
 Tests for `pyvim/lexer.py` (P1: cached, streaming `DocumentLexer`).
 """
+
 from __future__ import unicode_literals
 
 from prompt_toolkit.document import Document
@@ -27,8 +28,7 @@ def _make_python_doc(num_lines=120):
         elif i == 80:
             lines.append('    end multiline docstring"""\n    return 42')
         else:
-            lines.append('def func_%i(x):\n    return x * %i  # c %i'
-                         % (i, i, i))
+            lines.append('def func_%i(x):\n    return x * %i  # c %i' % (i, i, i))
     text = '\n'.join(lines)
     doc = Document(text, 0)
     _ = doc.lines
@@ -36,22 +36,23 @@ def _make_python_doc(num_lines=120):
 
 
 def test_lex_document_matches_pygments_lexer():
-    """ Token-for-token parity with prompt_toolkit's `PygmentsLexer`. """
+    """Token-for-token parity with prompt_toolkit's `PygmentsLexer`."""
     doc = _make_python_doc()
     stub = _StubEditorBuffer('sample.py')
 
     new_get_line = DocumentLexer(stub).lex_document(doc)
-    ref_get_line = PygmentsLexer.from_filename('sample.py',
-                                               sync_from_start=False).lex_document(doc)
+    ref_get_line = PygmentsLexer.from_filename('sample.py', sync_from_start=False).lex_document(doc)
 
     for row in range(len(doc.lines)):
-        assert new_get_line(row) == ref_get_line(row), \
-            'Token mismatch at row %i: %r != %r' % (row, new_get_line(row),
-                                                    ref_get_line(row))
+        assert new_get_line(row) == ref_get_line(row), 'Token mismatch at row %i: %r != %r' % (
+            row,
+            new_get_line(row),
+            ref_get_line(row),
+        )
 
 
 def test_lexer_instance_is_cached():
-    """ The Pygments lexer instance must not be re-looked-up on every edit. """
+    """The Pygments lexer instance must not be re-looked-up on every edit."""
     doc = _make_python_doc()
     stub = _StubEditorBuffer('sample.py')
     lexer = DocumentLexer(stub)
@@ -92,13 +93,15 @@ def test_no_location_falls_back_to_simple_lexer():
 
 
 def test_directory_listing_mode_still_uses_directory_lexer():
-    lines = ['" ==================================\n',
-             '" Directory Listing\n',
-             '../\n',
-             './\n',
-             'subdir/\n',
-             'file.py\n',
-             'file.md\n']
+    lines = [
+        '" ==================================\n',
+        '" Directory Listing\n',
+        '../\n',
+        './\n',
+        'subdir/\n',
+        'file.py\n',
+        'file.md\n',
+    ]
     doc = Document('\n'.join(lines), 0)
     _ = doc.lines
     stub = _StubEditorBuffer('/some/dir', in_file_explorer_mode=True)
@@ -108,8 +111,7 @@ def test_directory_listing_mode_still_uses_directory_lexer():
     new_get_line = DocumentLexer(stub).lex_document(doc)
     # The directory-listing mode must keep using the `DirectoryListingLexer`
     # via `PygmentsLexer`, exactly as before the P1 streaming change:
-    ref_get_line = PygmentsLexer(DirectoryListingLexer,
-                                 sync_from_start=False).lex_document(doc)
+    ref_get_line = PygmentsLexer(DirectoryListingLexer, sync_from_start=False).lex_document(doc)
 
     for row in range(len(doc.lines)):
         assert new_get_line(row) == ref_get_line(row)

@@ -7,8 +7,12 @@ Usage::
     e = Editor(files_to_edit)
     e.run()  # Runs the event loop, starts interaction.
 """
+
 from __future__ import unicode_literals
 
+import os
+
+import pygments
 from prompt_toolkit.application import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.enums import EditingMode
@@ -21,19 +25,14 @@ from .commands.completer import create_command_completer
 from .commands.handler import handle_command
 from .commands.preview import CommandPreviewer
 from .help import HELP_TEXT
+from .io import DirectoryIO, FileIO, GZipFileIO, HttpIO
 from .key_bindings import create_key_bindings
-from .layout import EditorLayout, get_terminal_title
+from .layout import EditorLayout
 from .style import generate_built_in_styles, get_editor_style_by_name
 from .thai import install_prompt_toolkit_thai_patches
 from .window_arrangement import WindowArrangement
-from .io import FileIO, DirectoryIO, HttpIO, GZipFileIO
 
-import pygments
-import os
-
-__all__ = (
-    'Editor',
-)
+__all__ = ('Editor',)
 
 
 class Editor(object):
@@ -44,6 +43,7 @@ class Editor(object):
     :param input: (Optionally) `prompt_toolkit.input.Input` object.
     :param output: (Optionally) `prompt_toolkit.output.Output` object.
     """
+
     def __init__(self, config_directory='~/.pyvim', input=None, output=None):
         install_prompt_toolkit_thai_patches()
         self.input = input
@@ -92,7 +92,7 @@ class Editor(object):
 
         # Create history and search buffers.
         def handle_action(buff):
-            ' When enter is pressed in the Vi command line. '
+            'When enter is pressed in the Vi command line.'
             text = buff.text  # Remember: leave_command_mode resets the buffer.
 
             # First leave command mode. We want to make sure that the working
@@ -108,13 +108,13 @@ class Editor(object):
             enable_history_search=True,
             completer=create_command_completer(self),
             history=commands_history,
-            multiline=False)
+            multiline=False,
+        )
 
         search_buffer_history = FileHistory(os.path.join(self.config_directory, 'search_history'))
         self.search_buffer = Buffer(
-            history=search_buffer_history,
-            enable_history_search=True,
-            multiline=False)
+            history=search_buffer_history, enable_history_search=True, multiline=False
+        )
 
         # Create key bindings registry.
         self.key_bindings = create_key_bindings(self)
@@ -126,6 +126,7 @@ class Editor(object):
         # Hide message when a key is pressed.
         def key_pressed(_):
             self.message = None
+
         self.application.key_processor.before_key_press += key_pressed
 
         # Command line previewer.
@@ -171,14 +172,15 @@ class Editor(object):
             editing_mode=EditingMode.VI,
             layout=self.editor_layout.layout,
             key_bindings=self.key_bindings,
-#            get_title=lambda: get_terminal_title(self),
+            #            get_title=lambda: get_terminal_title(self),
             style=DynamicStyle(lambda: self.current_style),
             paste_mode=Condition(lambda: self.paste_mode),
-#            ignore_case=Condition(lambda: self.ignore_case),  # TODO
+            #            ignore_case=Condition(lambda: self.ignore_case),  # TODO
             include_default_pygments_style=False,
             mouse_support=Condition(lambda: self.enable_mouse_support),
             full_screen=True,
-            enable_page_navigation_bindings=True)
+            enable_page_navigation_bindings=True,
+        )
 
         # Handle command line previews.
         # (e.g. when typing ':colorscheme blue', it should already show the
@@ -186,6 +188,7 @@ class Editor(object):
         def preview(_):
             if self.application.layout.has_focus(self.command_buffer):
                 self.previewer.preview(self.command_buffer.text)
+
         self.command_buffer.on_text_changed += preview
 
         application.vi_state.input_mode = InputMode.NAVIGATION

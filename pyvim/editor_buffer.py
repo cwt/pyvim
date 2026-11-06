@@ -1,16 +1,16 @@
 from __future__ import unicode_literals
-from prompt_toolkit.application.current import get_app
-from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.document import Document
-from prompt_toolkit import __version__ as ptk_version
-
-from pyvim.completion import DocumentCompleter
-from pyvim.reporting import report
-
-from six import string_types
 
 import os
 import weakref
+
+from prompt_toolkit import __version__ as ptk_version
+from prompt_toolkit.application.current import get_app
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.document import Document
+from six import string_types
+
+from pyvim.completion import DocumentCompleter
+from pyvim.reporting import report
 
 PTK3 = ptk_version.startswith('3.')
 
@@ -19,12 +19,9 @@ if PTK3:
 else:
     # `prompt_toolkit.eventloop` only exists in prompt_toolkit 2.x;
     # `# type: ignore` because mypy only sees the installed (3.x) package.
-    from prompt_toolkit.eventloop import (  # type: ignore[attr-defined]
-        call_from_executor, run_in_executor)
+    from prompt_toolkit.eventloop import call_from_executor, run_in_executor  # type: ignore[attr-defined]
 
-__all__ = (
-    'EditorBuffer',
-)
+__all__ = ('EditorBuffer',)
 
 
 class EditorBuffer(object):
@@ -34,6 +31,7 @@ class EditorBuffer(object):
     A 'prompt-toolkit' `Buffer` doesn't know anything about files, changes,
     etc... This wrapper contains the necessary data for the editor.
     """
+
     def __init__(self, editor, location=None, text=None):
         assert location is None or isinstance(location, string_types)
         assert text is None or isinstance(text, string_types)
@@ -62,7 +60,8 @@ class EditorBuffer(object):
             multiline=True,
             completer=DocumentCompleter(editor, self),
             document=Document(text, 0),
-            on_text_changed=self._on_text_changed)
+            on_text_changed=self._on_text_changed,
+        )
 
         # List of reporting errors, and index of those errors by line.
         self.report_errors = []
@@ -75,11 +74,11 @@ class EditorBuffer(object):
 
     @property
     def editor(self):
-        """ Back reference to the Editor. """
+        """Back reference to the Editor."""
         return self._editor_ref()
 
     def _on_text_changed(self, *args):
-        " Buffer text changed. "
+        "Buffer text changed."
         # Update the dirty flag once per text change, so that per-frame
         # `has_unsaved_changes` lookups are O(1).
         self._has_unsaved_changes = self.buffer.text != self._file_content
@@ -190,7 +189,7 @@ class EditorBuffer(object):
         return '%s(buffer=%r)' % (self.__class__.__name__, self.buffer)
 
     def run_reporter(self):
-        " Buffer text changed. "
+        "Buffer text changed."
         # 1. Fast exit BEFORE touching _reporter_is_running:
         #    Skip unnamed buffers and non-Python files immediately. (report()
         #    in reporting.py only knows how to check .py files.)

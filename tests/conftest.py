@@ -1,12 +1,11 @@
 from __future__ import unicode_literals
 
 import pytest
-
-from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.output import DummyOutput
 from prompt_toolkit.input import DummyInput
+from prompt_toolkit.output import DummyOutput
+
 from pyvim.editor import Editor
-from pyvim.window_arrangement import TabPage, EditorBuffer, Window
+from pyvim.window_arrangement import EditorBuffer, TabPage, Window
 
 
 @pytest.fixture

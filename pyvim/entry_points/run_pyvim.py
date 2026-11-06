@@ -10,16 +10,17 @@ Options:
     -O           : Split vertically.
     -u <pyvimrc> : Use this .pyvimrc file instead.
 """
+
 from __future__ import unicode_literals
-import docopt
+
 import os
+
+import docopt
 
 from pyvim.editor import Editor
 from pyvim.rc_file import run_rc_file
 
-__all__ = (
-    'run',
-)
+__all__ = ('run',)
 
 
 def run():
@@ -43,8 +44,7 @@ def run():
             run_rc_file(editor, default_pyvimrc)
 
     # Load files and run.
-    editor.load_initial_files(locations, in_tab_pages=in_tab_pages,
-                              hsplit=hsplit, vsplit=vsplit)
+    editor.load_initial_files(locations, in_tab_pages=in_tab_pages, hsplit=hsplit, vsplit=vsplit)
     editor.run()
 
 

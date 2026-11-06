@@ -1,11 +1,12 @@
-from __future__ import unicode_literals, print_function
-from prompt_toolkit.application import run_in_terminal
-from prompt_toolkit.document import Document
+from __future__ import print_function, unicode_literals
 
 import os
 import re
-import six
 from typing import Any, Dict, Set
+
+import six
+from prompt_toolkit.application import run_in_terminal
+from prompt_toolkit.document import Document
 
 __all__ = (
     'has_command_handler',
@@ -44,13 +45,16 @@ def get_commands_taking_locations():
 
 # Decorators
 
+
 def _cmd(name):
     """
     Base decorator for registering commands in this namespace.
     """
+
     def decorator(func):
         COMMANDS_TO_HANDLERS[name] = func
         return func
+
     return decorator
 
 
@@ -73,7 +77,9 @@ def location_cmd(name, accepts_force=False):
                 func(editor, location, force=force)
             else:
                 func(editor, location)
+
         return func
+
     return decorator
 
 
@@ -81,6 +87,7 @@ def cmd(name, accepts_force=False):
     """
     Decarator that registers a command that doesn't take any parameters.
     """
+
     def decorator(func):
         @_cmd(name)
         def command_wrapper(editor, variables):
@@ -92,7 +99,9 @@ def cmd(name, accepts_force=False):
                 func(editor, force=force)
             else:
                 func(editor)
+
         return func
+
     return decorator
 
 
@@ -100,15 +109,18 @@ def set_cmd(name, accepts_value=False):
     """
     Docorator that registers a ':set'-command.
     """
+
     def decorator(func):
         SET_COMMANDS[name] = func
         if accepts_value:
             SET_COMMANDS_TAKING_VALUE.add(name)
         return func
+
     return decorator
 
 
 # Actual command implementations
+
 
 @_cmd('set')
 def set_command_execute(editor, variables):
@@ -217,14 +229,18 @@ def buffer_list(editor):
     """
     List all buffers.
     """
+
     def handler():
         wa = editor.window_arrangement
         for info in wa.list_open_buffers():
             char = '%' if info.is_active else ''
             eb = info.editor_buffer
-            print(' %3i %-2s %-20s  line %i' % (
-                  info.index, char, eb.location, (eb.buffer.document.cursor_position_row + 1)))
+            print(
+                ' %3i %-2s %-20s  line %i'
+                % (info.index, char, eb.location, (eb.buffer.document.cursor_position_row + 1))
+            )
         six.moves.input('\nPress ENTER to continue...')
+
     run_in_terminal(handler)
 
 
@@ -407,14 +423,14 @@ def tab_previous(editor):
 
 @cmd('pwd')
 def pwd(editor):
-    " Print working directory. "
+    "Print working directory."
     directory = os.getcwd()
     editor.show_message('{}'.format(directory))
 
 
 @location_cmd('cd', accepts_force=False)
 def cd(editor, location):
-    " Change working directory. "
+    "Change working directory."
     try:
         os.chdir(location)
     except OSError as e:
@@ -435,82 +451,82 @@ def color_scheme(editor, variables):
 @set_cmd('nu')
 @set_cmd('number')
 def line_numbers_show(editor):
-    """ Show line numbers.  """
+    """Show line numbers."""
     editor.show_line_numbers = True
 
 
 @set_cmd('nonu')
 @set_cmd('nonumber')
 def line_numbers_hide(editor):
-    """ Hide line numbers. """
+    """Hide line numbers."""
     editor.show_line_numbers = False
 
 
 @set_cmd('hlsearch')
 @set_cmd('hls')
 def search_highlight(editor):
-    """ Highlight search matches. """
+    """Highlight search matches."""
     editor.highlight_search = True
 
 
 @set_cmd('nohlsearch')
 @set_cmd('nohls')
 def search_no_highlight(editor):
-    """ Don't highlight search matches. """
+    """Don't highlight search matches."""
     editor.highlight_search = False
 
 
 @set_cmd('paste')
 def paste_mode(editor):
-    """ Enter paste mode. """
+    """Enter paste mode."""
     editor.paste_mode = True
 
 
 @set_cmd('nopaste')
 def paste_mode_leave(editor):
-    """ Leave paste mode. """
+    """Leave paste mode."""
     editor.paste_mode = False
 
 
 @set_cmd('ruler')
 @set_cmd('ru')
 def ruler_show(editor):
-    """ Show ruler. """
+    """Show ruler."""
     editor.show_ruler = True
 
 
 @set_cmd('noruler')
 @set_cmd('noru')
 def ruler_hide(editor):
-    """ Hide ruler. """
+    """Hide ruler."""
     editor.show_ruler = False
 
 
 @set_cmd('wildmenu')
 @set_cmd('wmnu')
 def wild_menu_show(editor):
-    """ Show wildmenu. """
+    """Show wildmenu."""
     editor.show_wildmenu = True
 
 
 @set_cmd('nowildmenu')
 @set_cmd('nowmnu')
 def wild_menu_hide(editor):
-    """ Hide wildmenu. """
+    """Hide wildmenu."""
     editor.show_wildmenu = False
 
 
 @set_cmd('expandtab')
 @set_cmd('et')
 def tab_expand(editor):
-    """ Enable tab expension. """
+    """Enable tab expension."""
     editor.expand_tab = True
 
 
 @set_cmd('noexpandtab')
 @set_cmd('noet')
 def tab_no_expand(editor):
-    """ Disable tab expension. """
+    """Disable tab expension."""
     editor.expand_tab = False
 
 
@@ -555,143 +571,146 @@ def set_scroll_offset(editor, value):
 @set_cmd('incsearch')
 @set_cmd('is')
 def incsearch_enable(editor):
-    """ Enable incsearch. """
+    """Enable incsearch."""
     editor.incsearch = True
 
 
 @set_cmd('noincsearch')
 @set_cmd('nois')
 def incsearch_disable(editor):
-    """ Disable incsearch. """
+    """Disable incsearch."""
     editor.incsearch = False
 
 
 @set_cmd('ignorecase')
 @set_cmd('ic')
 def search_ignorecase(editor):
-    """ Enable case insensitive searching. """
+    """Enable case insensitive searching."""
     editor.ignore_case = True
 
 
 @set_cmd('noignorecase')
 @set_cmd('noic')
 def searc_no_ignorecase(editor):
-    """ Disable case insensitive searching. """
+    """Disable case insensitive searching."""
     editor.ignore_case = False
 
 
 @set_cmd('list')
 def unprintable_show(editor):
-    """ Display unprintable characters. """
+    """Display unprintable characters."""
     editor.display_unprintable_characters = True
 
 
 @set_cmd('nolist')
 def unprintable_hide(editor):
-    """ Hide unprintable characters. """
+    """Hide unprintable characters."""
     editor.display_unprintable_characters = False
 
 
 @set_cmd('jedi')
 def jedi_enable(editor):
-    """ Enable Jedi autocompletion for Python files. """
+    """Enable Jedi autocompletion for Python files."""
     editor.enable_jedi = True
 
 
 @set_cmd('nojedi')
 def jedi_disable(editor):
-    """ Disable Jedi autocompletion. """
+    """Disable Jedi autocompletion."""
     editor.enable_jedi = False
 
 
 @set_cmd('relativenumber')
 @set_cmd('rnu')
 def relative_number(editor):
-    " Enable relative number "
+    "Enable relative number"
     editor.relative_number = True
 
 
 @set_cmd('norelativenumber')
 @set_cmd('nornu')
 def no_relative_number(editor):
-    " Disable relative number "
+    "Disable relative number"
     editor.relative_number = False
 
 
 @set_cmd('wrap')
 def enable_wrap(editor):
-    " Enable line wrapping. "
+    "Enable line wrapping."
     editor.wrap_lines = True
 
 
 @set_cmd('nowrap')
 def disable_wrap(editor):
-    " disable line wrapping. "
+    "disable line wrapping."
     editor.wrap_lines = False
 
 
 @set_cmd('breakindent')
 @set_cmd('bri')
 def enable_breakindent(editor):
-    " Enable the breakindent option. "
+    "Enable the breakindent option."
     editor.break_indent = True
 
 
 @set_cmd('nobreakindent')
 @set_cmd('nobri')
 def disable_breakindent(editor):
-    " Enable the breakindent option. "
+    "Enable the breakindent option."
     editor.break_indent = False
 
 
 @set_cmd('mouse')
 def enable_mouse(editor):
-    " Enable mouse . "
+    "Enable mouse ."
     editor.enable_mouse_support = True
 
 
 @set_cmd('nomouse')
 def disable_mouse(editor):
-    " Disable mouse. "
+    "Disable mouse."
     editor.enable_mouse_support = False
 
 
 @set_cmd('tildeop')
 @set_cmd('top')
 def enable_tildeop(editor):
-    " Enable tilde operator. "
+    "Enable tilde operator."
     editor.application.vi_state.tilde_operator = True
 
 
 @set_cmd('notildeop')
 @set_cmd('notop')
 def disable_tildeop(editor):
-    " Disable tilde operator. "
+    "Disable tilde operator."
     editor.application.vi_state.tilde_operator = False
 
 
 @set_cmd('cursorline')
 @set_cmd('cul')
 def enable_cursorline(editor):
-    " Highlight the line that contains the cursor. "
+    "Highlight the line that contains the cursor."
     editor.cursorline = True
+
 
 @set_cmd('nocursorline')
 @set_cmd('nocul')
 def disable_cursorline(editor):
-    " No cursorline. "
+    "No cursorline."
     editor.cursorline = False
+
 
 @set_cmd('cursorcolumn')
 @set_cmd('cuc')
 def enable_cursorcolumn(editor):
-    " Highlight the column that contains the cursor. "
+    "Highlight the column that contains the cursor."
     editor.cursorcolumn = True
+
 
 @set_cmd('nocursorcolumn')
 @set_cmd('nocuc')
 def disable_cursorcolumn(editor):
-    " No cursorcolumn. "
+    "No cursorcolumn."
     editor.cursorcolumn = False
 
 
@@ -704,14 +723,14 @@ def set_colorcolumn(editor, value):
         else:
             numbers = []
     except ValueError:
-        editor.show_message(
-            'Invalid value. Expecting comma separated list of integers')
+        editor.show_message('Invalid value. Expecting comma separated list of integers')
     else:
         editor.colorcolumn = numbers
 
 
 def substitute(editor, range_start, range_end, search, replace, flags):
-    """ Substitute /search/ with /replace/ over a range of text """
+    """Substitute /search/ with /replace/ over a range of text"""
+
     def get_line_index_iterator(cursor_position_row, range_start, range_end):
         if not range_start:
             assert not range_end
@@ -751,9 +770,9 @@ def substitute(editor, range_start, range_end, search, replace, flags):
     # constructing a second `Document` just to translate row/col to an index.
     doc = Document(new_text)
     row = new_cursor_position_row
-    cursor_position = (
-        doc.translate_row_col_to_index(row, 0)
-        + (len(doc.lines[row]) - len(doc.lines[row].lstrip())))
+    cursor_position = doc.translate_row_col_to_index(row, 0) + (
+        len(doc.lines[row]) - len(doc.lines[row].lstrip())
+    )
     buffer.document = doc
     buffer.cursor_position = cursor_position
     buffer._search(search_state, include_current_position=True)

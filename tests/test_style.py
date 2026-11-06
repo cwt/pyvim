@@ -1,6 +1,7 @@
 """
 Tests for `pyvim/style.py` (P2: lazy style mapping).
 """
+
 from __future__ import unicode_literals
 
 from collections.abc import Mapping

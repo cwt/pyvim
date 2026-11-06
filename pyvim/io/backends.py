@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 import gzip
 import io
 import os
+
 import six
 from six.moves import urllib
 
@@ -23,6 +24,7 @@ class FileIO(EditorIO):
     """
     I/O backend for the native file system.
     """
+
     def can_open_location(cls, location):
         # We can handle all local files.
         return '://' not in location and not os.path.isdir(location)
@@ -64,6 +66,7 @@ class GZipFileIO(EditorIO):
     It is possible to edit this file as if it were not compressed.
     The read and write call will decompress and compress transparently.
     """
+
     def can_open_location(cls, location):
         return FileIO().can_open_location(location) and location.endswith('.gz')
 
@@ -91,6 +94,7 @@ class DirectoryIO(EditorIO):
     """
     Create a textual listing of the directory content.
     """
+
     def can_open_location(cls, location):
         # We can handle all local directories.
         return '://' not in location and os.path.isdir(location)
@@ -139,6 +143,7 @@ class HttpIO(EditorIO):
     """
     I/O backend that reads from HTTP.
     """
+
     def can_open_location(cls, location):
         # We can handle all local directories.
         return location.startswith('http://') or location.startswith('https://')

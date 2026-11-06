@@ -1,6 +1,7 @@
 """
 Tests for `pyvim/completion.py` (P3: singleton + line-cached word completer).
 """
+
 from __future__ import unicode_literals
 
 from prompt_toolkit.completion import CompleteEvent
@@ -51,8 +52,7 @@ def test_cache_key_stable_while_typing_on_current_line():
     # unchanged: the non-cursor word cache must *not* be recomputed.
     c2 = _completions(comp, 'alpha beta\nalp', 14)
     assert c2 == ['alpha']
-    assert comp._cached_key == key, \
-        'typing on the current line must not rescan the other lines'
+    assert comp._cached_key == key, 'typing on the current line must not rescan the other lines'
 
 
 def test_cache_invalidated_when_other_lines_change():
@@ -63,8 +63,9 @@ def test_cache_invalidated_when_other_lines_change():
     # 'alpine' appears on a non-cursor line of the *new* text:
     c3 = _completions(comp, 'alpha zebra alpine\nal', 21)
     assert c3 == ['alpha', 'alpine']
-    assert comp._cached_key != key_before, \
+    assert comp._cached_key != key_before, (
         'changed other lines must invalidate the non-cursor word cache'
+    )
 
 
 def test_document_completer_persists_words_completer(editor, editor_buffer):
@@ -78,14 +79,14 @@ def test_document_completer_persists_words_completer(editor, editor_buffer):
     assert completer._words_completer._cached_key is None
 
     doc = Document('gamma alpha\ngamm', 16)
-    assert 'gamma' in [c.text for c in completer.get_completions(doc,
-                                                                 CompleteEvent())]
+    assert 'gamma' in [c.text for c in completer.get_completions(doc, CompleteEvent())]
     assert completer._words_completer._cached_key is not None
 
     words_completer = completer._words_completer
     list(completer.get_completions(doc, CompleteEvent()))
-    assert completer._words_completer is words_completer, \
+    assert completer._words_completer is words_completer, (
         'the words completer instance must persist across calls'
+    )
 
 
 def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
@@ -103,5 +104,6 @@ def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
     # and new `complete(line, column)` APIs) and not the words completer.
     names = [c.text for c in completer.get_completions(doc, CompleteEvent())]
     assert 'os' in names
-    assert completer._words_completer._cached_key is None, \
+    assert completer._words_completer._cached_key is None, (
         '.py files with Jedi enabled must not use the words completer'
+    )
