@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 import bisect
 import re
 import weakref
+from importlib.util import find_spec
 
 from prompt_toolkit.completion import Completer, Completion
 
@@ -10,6 +11,23 @@ __all__ = (
     'DocumentCompleter',
     'DocumentWordsCompleter',
 )
+
+
+def _jedi_available():
+    """
+    Return whether the optional jedi dependency is importable.
+
+    `importlib.util.find_spec` is a cheap, side-effect-free probe (it does
+    not import jedi - importing jedi is slow and must stay deferred to the
+    first Python completion), so this stays resilient even when jedi is
+    missing from the environment.
+    """
+    try:
+        return find_spec('jedi') is not None
+    except (ImportError, ValueError):
+        # `find_spec` raises ValueError for e.g. 'sys' masked names;
+        # treat as unavailable. (ImportError covers pkgutil-only setups.)
+        return False
 
 
 class DocumentWordsCompleter(Completer):
@@ -93,8 +111,10 @@ class DocumentCompleter(Completer):
         editor = self._editor_ref()
         location = self._editor_buffer_ref().location or '.txt'
 
-        # Select completer.
-        if location.endswith('.py') and editor.enable_jedi:
+        # Select completer. jedi is optional (not in install_requires): when
+        # it is missing, fall back to the words completer instead of crashing
+        # with an ImportError on the first Tab press (docs/bugs/003.md).
+        if location.endswith('.py') and editor.enable_jedi and _jedi_available():
             completer = _PythonCompleter(location)
         else:
             completer = self._words_completer
@@ -159,8 +179,13 @@ class _PythonCompleter(Completer):
     def _get_jedi_script_from_document(self, document):
         import inspect
 
-        import jedi  # We keep this import in-line, to improve start-up time.
-        # Importing Jedi is 'slow'.
+        try:
+            import jedi  # We keep this import in-line, to improve start-up time.
+            # Importing Jedi is 'slow'.
+        except ImportError:
+            # jedi is an optional dependency; completer selection already
+            # falls back to the words completer when it is missing.
+            return None
 
         # `Script()` accepted `line`/`column` keyword arguments until jedi
         # 0.20; detect which API we are talking to.

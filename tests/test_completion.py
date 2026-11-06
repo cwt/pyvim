@@ -107,3 +107,41 @@ def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
     assert completer._words_completer._cached_key is None, (
         '.py files with Jedi enabled must not use the words completer'
     )
+
+
+def test_document_completer_falls_back_without_jedi(editor, editor_buffer, monkeypatch):
+    # jedi is optional: when the module is missing (or the probe is forced
+    # off), `.py` buffers must complete with the words completer instead of
+    # raising ImportError on the first Tab press (docs/bugs/003.md).
+    monkeypatch.setattr('pyvim.completion._jedi_available', lambda: False)
+    editor.enable_jedi = True
+    editor_buffer.location = '/some/project/module.py'
+
+    completer = DocumentCompleter(editor, editor_buffer)
+    doc = Document('gamma alpha\ngamm', 16)
+    names = [c.text for c in completer.get_completions(doc, CompleteEvent())]
+    assert names == ['gamma']
+
+    # And with no word before the cursor the fallback stays silent.
+    doc = Document('import o', 8)
+    assert [c.text for c in completer.get_completions(doc, CompleteEvent())] == []
+
+
+def test_python_completer_missing_module_degrades_to_no_completions(
+    editor, editor_buffer, monkeypatch
+):
+    # Even if selection ever picks `_PythonCompleter`, a missing jedi module
+    # must degrade to "no completions" rather than crash (ImportError guard).
+    import sys
+
+    import pyvim.completion as completion_module
+
+    monkeypatch.setitem(sys.modules, 'jedi', None)  # `import jedi` -> ImportError
+    monkeypatch.setattr(completion_module, '_jedi_available', lambda: True)
+
+    editor.enable_jedi = True
+    editor_buffer.location = '/some/project/module.py'
+    completer = DocumentCompleter(editor, editor_buffer)
+
+    doc = Document('import o', 8)
+    list(completer.get_completions(doc, CompleteEvent()))  # must not raise
