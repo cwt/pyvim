@@ -330,25 +330,25 @@ def quit_all(editor, force=False):
 @location_cmd('write', accepts_force=True)
 def write(editor, location, force=False):
     """
-    Write file.
+    Write file. Returns whether the buffer was written.
     """
     if location and not force and os.path.exists(location):
         editor.show_message('File exists (add ! to overriwe)')
-    else:
-        eb = editor.window_arrangement.active_editor_buffer
-        if location is None and eb.location is None:
-            editor.show_message(_NO_FILE_NAME)
-        else:
-            eb.write(location)
+        return False
+    eb = editor.window_arrangement.active_editor_buffer
+    if location is None and eb.location is None:
+        editor.show_message(_NO_FILE_NAME)
+        return False
+    return eb.write(location)
 
 
 @location_cmd('wq', accepts_force=True)
 def write_and_quit(editor, location, force=False):
     """
-    Write file and quit.
+    Write file and quit. Does not quit when the write failed.
     """
-    write(editor, location, force=force)
-    editor.application.exit()
+    if write(editor, location, force=force):
+        editor.application.exit()
 
 
 @cmd('cq')
@@ -370,8 +370,7 @@ def write_and_quit_all(editor):
     eb = editor.window_arrangement.active_editor_buffer
     if eb.location is None:
         editor.show_message(_NO_FILE_NAME)
-    else:
-        eb.write()
+    elif eb.write():
         quit(editor, all_=True, force=False)
 
 

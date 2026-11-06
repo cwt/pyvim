@@ -200,7 +200,7 @@ def test_has_unsaved_changes_after_write_and_reload(editor, tmp_path):
     eb.buffer.text = 'modified'
     assert eb.has_unsaved_changes is True
 
-    eb.write()
+    assert eb.write() is True
     assert eb.has_unsaved_changes is False
     # `EditorBuffer.write` always stores a trailing newline.
     assert p.read_text() == 'modified\n'
@@ -210,6 +210,34 @@ def test_has_unsaved_changes_after_write_and_reload(editor, tmp_path):
     eb.reload()
     assert eb.has_unsaved_changes is False
     assert eb.buffer.text == 'externally edited'
+
+
+def test_write_reports_failure(editor, tmp_path):
+    # Successful write returns True...
+    eb = EditorBuffer(editor)
+    eb.buffer.text = 'exported'
+    target = tmp_path / 'new.txt'
+    assert eb.write(str(target)) is True
+    assert target.read_text() == 'exported\n'
+
+    # ...and an unwritable location returns False and shows a message.
+    eb.buffer.text = 'exported-again'
+    editor.message = None
+    assert eb.write(str(tmp_path / 'missing-dir' / 'file.txt')) is False
+    assert editor.message, 'a failed write must surface a message'
+    assert eb.buffer.text == 'exported-again'
+    assert eb.has_unsaved_changes is True
+
+
+def test_write_unknown_location_fails_without_side_effect(editor, tmp_path):
+    # docs/bugs/006.md: unknown locations must NOT fall through to the last
+    # I/O backend (which would silently create a literally named local file).
+    eb = EditorBuffer(editor)
+    eb.buffer.text = 'x'
+    assert eb.write('ftp://host/file.txt') is False
+    assert editor.message == "Unknown location: 'ftp://host/file.txt'"
+    assert not (tmp_path / 'ftp:').exists()
+    assert not (tmp_path / 'ftp').exists()
 
 
 def test_substitute_marks_unsaved_changes(editor, tmp_path):
