@@ -45,6 +45,8 @@ COMMAND_GRAMMAR = compile(
     \s*
 """
     % {
-        'commands_taking_locations': '|'.join(get_commands_taking_locations()),
+        # `sorted` keeps the regex alternation deterministic between runs
+        # (docs/bugs/009.md); a set's iteration order changes per interpreter.
+        'commands_taking_locations': '|'.join(sorted(get_commands_taking_locations())),
     }
 )

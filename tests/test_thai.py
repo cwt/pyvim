@@ -690,3 +690,31 @@ def test_sticky_gate_note_document_text(sticky_gate) -> None:
     sticky_gate.value = False
     thai.note_document_text("ຳ")
     assert sticky_gate.value is True
+
+
+def test_prev_cell_offset_never_crosses_newline(monkeypatch) -> None:
+    """Cell-cluster walks over multi-line text must stop at `\n` (docs/bugs/014.md).
+
+    ``is_combining_char('\n')`` is False because the cp<0x300 branch fires
+    before the general width-0 fallback; the snap machinery of the `e`/`E`
+    bindings depends on that invariant being kept.
+    """
+    assert thai.is_combining_char("\n") is False
+    text = "x\nที่ดิน"  # newline at index 1, Thai line 2..7
+    n = len(text)
+    # Walking back from the end of the document must stop at the base
+    # character of the last cluster (น, index 7) - never onto the newline
+    # (1) or the line above (0):
+    assert prev_cell_offset(text, n, 1) == 7
+    # From every cluster boundary *inside* the Thai line (cols 3..8), the
+    # walk stays within that line (>= line start 2). Stepping back from the
+    # line start itself (col 2) legitimately lands on the previous line's
+    # tail (1). The e/E bindings only snap from span ends, which are
+    # strictly inside a line, so they never see the boundary case.
+    assert min(prev_cell_offset(text, col, 1) for col in range(3, n + 1)) >= 2
+    assert prev_cell_offset(text, 2, 1) == 1
+
+    # Even a leading combining mark on a line cannot drag the walk across \n:
+    # " mark preceded by \n " - walk stops just before the newline.
+    text_leading_mark = "ab\n\u0e48cd"
+    assert prev_cell_offset(text_leading_mark, len(text_leading_mark), 1) >= 3

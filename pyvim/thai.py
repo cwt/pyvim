@@ -165,6 +165,14 @@ def is_combining_char(ch: str) -> bool:
     """
     Fast-path check for Thai/Lao combining marks (`_THAI_COMBINING_CPS`),
     with general Unicode `Mn` / `get_cwidth(ch) == 0` fallback for other scripts.
+
+    NOTE: characters below U+0300 always classify as non-combining — in
+    particular `\n`. The cell-cluster scanners (`snap_to_cell_start`,
+    `prev_cell_offset`) rely on newline never behaving like a combining
+    mark so that backward walks over multi-line `Document.text` stop at
+    line boundaries; keep that ordering when generalizing this predicate
+    (see tests/test_thai.py::test_prev_cell_offset_never_crosses_newline
+    and docs/bugs/014.md of the findings bundle).
     """
     if not ch:
         return False
