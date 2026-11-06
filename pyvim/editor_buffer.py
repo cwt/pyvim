@@ -220,6 +220,10 @@ class EditorBuffer(object):
         #    3.14+, where asyncio.get_event_loop() raises RuntimeError when no
         #    loop is running), leave _reporter_is_running = False so that
         #    Editor.run() can trigger the reporter once the loop is active.
+        #
+        #    `loop` is initialized here so both PTK2/PTK3 dispatches below
+        #    see a defined binding regardless of branch (docs/bugs/016.md).
+        loop = None
         if PTK3:
             try:
                 loop = asyncio.get_running_loop()
