@@ -26,6 +26,12 @@ Verified against prompt_toolkit 3.0.53 source, live micro-probes, the test
 suite (68 passed), `mypy .` (40 files clean) and `tools/bench_plans.py`
 (figures reproduced). No code was changed yet; every finding is open.
 
+**Resolution note (2026-11-06 fix arc):** every finding below has since been
+fixed and machine-re-verified (hg rev 167–our closing changeset: 100 tests,
+43-file mypy baseline at the 3.10 floor, ruff clean, bench reproducing). Each
+document's frontmatter carries `fix_status: fixed (hg rev N)`; the fix-verdict
+revisions are also summarized in [`log.md`](log.md).
+
 ## Defects (`type: bug`)
 
 | ID | Finding | Area | Priority |

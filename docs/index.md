@@ -23,7 +23,7 @@ This directory contains the [Open Knowledge Format (OKF v0.2)](https://github.co
 
 ## Audit & Findings
 
-* [Findings Bundle](bugs/index.md) — **New (2026-11-06)**: 37 machine-verified findings from the deep review at hg rev 164 — defects 001–016 (`type: bug`, incl. two high-priority performance findings in the Thai hot paths and several uncaught-exception paths) and improvements 017–037 (`type: improvement`: dead code, duplication, legacy weight, packaging/toolchain, readability, docs drift).
+* [Findings Bundle](bugs/index.md) — **Closed (2026-11-06)**: 37 machine-verified findings from the deep review at hg rev 164 — defects 001–016 (`type: bug`, incl. two high-priority performance findings in the Thai hot paths and several uncaught-exception paths) and improvements 017–037 (`type: improvement`: dead code, duplication, legacy weight, packaging/toolchain, readability, docs drift). All fixed during the 2026-11-06 fix arc; every doc records its fix revision.
 
 ## Meta
 

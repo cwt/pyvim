@@ -307,6 +307,18 @@ Ported directly from `szn/src/thai.zig:285-326` (`findThaiClusterEnd`) and `szn/
      ```
    * Handles multiple following vowels (`"เกาะ"` $\rightarrow$ `[0, 4]`), `SARA AM` (`"น้ำ"` $\rightarrow$ `[0, 3]`), Ro Han (`"ธรรม"` $\rightarrow$ `"ธรร"` `[0, 3]` + `"ม"` `[3, 4]`), trailing right-attaching marks (`"ดีๆ"` $\rightarrow$ `[0, 3]`), and standalone right-attaching symbols at cluster start (`"ๆฯ"` $\rightarrow$ `[0, 1]`, `[1, 2]`).
 
+### 3.3b Implementation refines §3.2/§3.3 (2026-11-06, hg rev 169)
+
+The shipped implementation has drifted beyond the plan snippets above, by design:
+
+* `next_cell_offset` clamps negative/degenerate inputs (`count <= 0` returns
+  `n if col >= n else max(0, col)`); `prev_cell_offset` returns
+  `min(col, len(line))` for non-moving steps.
+* Word motions are **line-local**: `_word_spans_for_line` (an `lru_cache`
+  keyed on the line text) replaced whole-document scans — `:w` on a 2.4 MB
+  Thai file dropped from ~640 ms to ~0.4 ms cold / ~0.4 µs warm
+  (see `docs/bugs/001.md`).
+
 ### 3.4 Reproducible Micro-Benchmarks (`tools/bench_plans.py`)
 
 Running `python tools/bench_plans.py` confirms all cell stops, reverse `prev_cell_offset` walks, and syllable cluster ends, and measures sub-microsecond (`< 1 µs`) call latency (`~50–75 ns` ASCII / `~310 ns` Thai on macOS arm64 Python 3.15; `~430 ns` ASCII / `~570 ns` Thai on Linux x86_64 Python 3.12)[^src-bench]:
@@ -506,6 +518,14 @@ def _sanitize_and_invalidate_sara_am(
                 elif left_changed and not cur_changed:
                     prev_row[x] = _SARA_AM_POISON
 
+
+> **Implementation update (hg rev 170, 174)**: the shipped versions of
+> `_sanitize_and_invalidate_sara_am` / `_install_renderer_patch` returned
+> `bool`, use `setattr`, keep the original via `_pyvim_original`, guard
+> `args[2]`/`args[5]` lengths, and the whole scan is gated by a sticky
+> "session may render Thai" flag (`note_document_text`) so ASCII-only
+> sessions skip it entirely (`docs/bugs/002.md`). The rollback in §4.1
+> also restores both `KeyProcessor` patches (`docs/bugs/005.md`).
 
 def _install_renderer_patch() -> None:
     orig_diff = getattr(ptk_renderer, "_output_screen_diff", None)

@@ -137,6 +137,13 @@ class DocumentLexer(Lexer):
                 return None
 
             def get_generator(i):
+                # Reuse a generator that already covers `i` when possible;
+                # only create a fresh one (from the sync position) otherwise:
+                # the reuse keeps each render frame to a handful of lexed
+                # tokens instead of re-lexing per visible line.
+                generator = find_closest_generator(i)
+                if generator:
+                    return generator
                 start = max(0, i - self.MIN_LINES_BACKWARDS)
                 if start == 0:
                     row, column = 0, 0

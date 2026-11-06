@@ -9,10 +9,28 @@ pyvim
 
 .. image :: https://github.com/jonathanslenders/pyvim/raw/master/docs/images/welcome-screen.png
 
-Issues, questions, wishes, comments, feedback, remarks? Please create a GitHub
-issue, I appreciate it.
+**This fork** of Jonathan Slenders' `original pyvim
+<https://github.com/jonathanslenders/pyvim>`_ runs on **Python 3.10+**
+(`prompt_toolkit` 3.0) and adds two large, machine-verified plans
+(documented in the `docs/ <docs/index.md>`_ Open Knowledge bundle):
 
-|Build Status|
+- **Thai & Lao script support**: terminal *cell-cluster* navigation and
+  editing (``h``, ``l``, ``j``, ``k``, ``x``, ``X``, ``s``, ``r``, ``~``,
+  ``$``, ``e``...), two-tier Thai word segmentation (``libthai`` with an
+  always-available orthographic fallback) and SARA AM
+  (``U+0E33``/``U+0EB3``) differential renderer fixes. See
+  ``docs/thai_support_plan.md``.
+- **Speed, latency & modern-Python stability**: streamed + cached Pygments
+  highlighting, per-line word-span caches for Thai word motions, lazy
+  colorscheme loading, cached word completion, an O(1) pyflakes error
+  index, and the Python 3.14+/3.15 ``asyncio`` startup-crash fix. See
+  ``docs/speed_latency_plan.md``.
+
+All changes are audited in ``docs/bugs/`` (37 findings, each reproduced
+and fixed); quality is enforced with pytest, mypy and ruff.
+
+Issues, questions, wishes, comments, feedback, remarks? Please create a
+GitHub issue, I appreciate it.
 
 
 Installation
@@ -49,9 +67,12 @@ We have already many nice things, for instance:
 
 - All of the functionality of `prompt_toolkit
   <http://github.com/jonathanslenders/python-prompt-toolkit>`_. This includes a
-  lot of Vi key bindings, it's platform independent and runs on every Python
-  version from python 2.6 up to 3.4. It also runs on Pypy with a noticeable
-  performance boost.
+  lot of Vi key bindings, it's platform independent and runs every Python
+  version covered by ``python_requires >= 3.10``.
+
+- Thai/Lao input files: cell-cluster safe navigation and *syntax-aware*
+  word segmentation, including dictionary segmentation when ``libthai`` is
+  installed.
 
 - Several ``:set ...`` commands have been implemented, like ``incsearch``,
   ``number``, ``ignorecase``, ``wildmenu``, ``expandtab``, ``hlsearch``,
@@ -150,24 +171,23 @@ day we will have a built-in Python debugger or mouse support. We'll see. :)
 Testing
 -------
 
-To run all tests, install pytest:
+To run all tests, install the development requirements (pytest, mypy, ruff):
 
-    pip install pytest
+::
 
-And then run from root pyvim directory:
+    python -m pip install -r requirements-dev.txt
 
-    py.test
+And then run from the root pyvim directory:
 
-To test pyvim against all supported python versions, install tox:
+::
 
-    pip install tox
+    python -m pytest tests
 
-And then run from root pyvim directory:
+Quality gates: ``mypy .`` (typing, checked against the 3.10 floor),
+``ruff check`` (lint) and ``ruff format --check .`` (formatting). The
+reproducible measurements quoted in the docs come from::
 
-    tox
-
-You need to have installed all the supported versions of python in order to run
-tox command successfully.
+    python tools/bench_plans.py
 
 
 Why did I create Pyvim?
@@ -221,6 +241,3 @@ Thanks
 - To the Python wcwidth port of Jeff Quast for support of double width characters.
 - To Guido van Rossum, for creating Python.
 
-
-.. |Build Status| image:: https://api.travis-ci.org/jonathanslenders/pyvim.svg?branch=master
-    :target: https://travis-ci.org/jonathanslenders/pyvim#

@@ -81,10 +81,19 @@ This document catalogs the stability bugs, per-keystroke latency bottlenecks, an
   P3 DocumentWordsCompleter (4000 lines, typing on current line): fresh=2.25 ms -> singleton_cached=0.038 ms
 ```
 
+### 1.2b Benchmark fidelity note (hg rev 175)
+
+`tools/bench_plans.py` now imports the shipped `pyvim.thai`,
+`pyvim.lexer`, `pyvim.style` and `pyvim.completion` modules instead of
+re-implementing them (`docs/bugs/008.md` of the findings bundle), and the
+word motions are line-local (`docs/bugs/001.md`). The P1 figure is
+printed as a single implementation number (P1a/P1b/P1c) with the
+`PygmentsLexer` reference used only for token parity.
+
 ### 1.3 Implementation Record (rev 161–162, 2026-11-06)
 
 * **Implementation (rev 161, `024e7f40f812`)**: P0–P5 landed as one verified changeset — 8 modified source files plus six new test modules (42 tests): [`tests/test_editor_buffer.py`](../tests/test_editor_buffer.py) (P0/P5, 9 tests), [`tests/test_lexer.py`](../tests/test_lexer.py) (P1, 5), [`tests/test_style.py`](../tests/test_style.py) (P2, 7), [`tests/test_completion.py`](../tests/test_completion.py) (P3, 8), [`tests/test_layout.py`](../tests/test_layout.py) (P4, 7), [`tests/test_io_backends.py`](../tests/test_io_backends.py) (P5, 6).[^src-tests]
-* **Mypy sweep (rev 162, `e8122198d2b2`)**: added [`mypy.ini`](../mypy.ini)[^src-mypy] (`python_version = 3.15`, `ignore_missing_imports`) and fixed the 9 pre-existing code-level errors: two `no-redef` misnamed handler defs (`pwd` → `cd` for `:cd`; `set_scroll_offset` → `set_colorcolumn` for `:colorcolumn`; registration is decorator-driven, so the renames are behavior-neutral), four unannotated module-level tables in `pyvim/commands/commands.py`, `six.with_metaclass(ABCMeta, object)` → `metaclass=ABCMeta` in `pyvim/io/base.py`, and a targeted `# type: ignore[attr-defined]` on the legacy PTK2-only `prompt_toolkit.eventloop` import in `pyvim/editor_buffer.py`. `mypy .` is clean (38 files); 55 tests pass.
+* **Mypy sweep (rev 162, `e8122198d2b2`)**: added [`mypy.ini`](../mypy.ini)[^src-mypy] (`python_version = 3.15`, `ignore_missing_imports`) and fixed the 9 pre-existing code-level errors: two `no-redef` misnamed handler defs (`pwd` → `cd` for `:cd`; `set_scroll_offset` → `set_colorcolumn` for `:colorcolumn`; registration is decorator-driven, so the renames are behavior-neutral), four unannotated module-level tables in `pyvim/commands/commands.py`, `six.with_metaclass(ABCMeta, object)` → `metaclass=ABCMeta` in `pyvim/io/base.py`, and a targeted `# type: ignore[attr-defined]` on the legacy PTK2-only `prompt_toolkit.eventloop` import in `pyvim/editor_buffer.py`. `mypy .` is clean (43 files as of hg rev 190, checked against the 3.10 packaging floor); 100 tests pass.
 
 ### 1.4 Deviations & Fixes Beyond the Original Spec
 

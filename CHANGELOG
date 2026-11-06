@@ -1,6 +1,44 @@
 CHANGELOG
 =========
 
+3.0.4: unreleased
+-----------------
+
+Stability, performance and international input:
+
+- Fixed the Python 3.14+/3.15 ``asyncio.get_event_loop()`` startup crash:
+  opening any file before the event loop runs no longer aborts ``pyvim``.
+- Added Thai & Lao script support: terminal cell-cluster navigation and
+  edits (``h``, ``l``, ``j``, ``k``, ``x``, ``X``, ``s``, ``r``, ``~``, ``$``,
+  ``e``...), two-tier Thai word segmentation (libthai, with an
+  orthographic fallback), and SARA AM (U+0E33/U+0EB3) differential renderer
+  fixes. See ``docs/thai_support_plan.md``.
+- Latency work (``docs/speed_latency_plan.md``): streaming + cached
+  Pygments highlighting, per-line word-span caching for Thai word
+  motions, lazy colorscheme loading, singleton word completion cache and
+  an O(1) pyflakes error index.
+
+Bug fixes (machine-verified findings bundle, ``docs/bugs/``):
+
+- ``:s`` with a line range beyond EOF reports ``E19`` instead of crashing;
+  the cursor lands on the last substituted line.
+- jedi is optional: ``.py`` completion falls back to word completion when
+  jedi is not installed instead of crashing.
+- A failed ``:w`` no longer terminates the editor through ``:wq``/``:wqa``;
+  unknown locations report an error without side effects.
+- ReportingProcessor runs before tab expansion so pyflakes error columns
+  stay aligned on tab-indented lines, and the message toolbar shows all
+  errors of the cursor line.
+- Buffer numbering inserts new buffers after the active one; command
+  grammar alternation is deterministic.
+
+Tooling and packaging:
+
+- Added ruff (lint + format) and a mypy baseline checked against the
+  packaging floor; ``tox`` setup replaced by ``requirements-dev.txt``.
+- Python floor is now ``python_requires='>=3.10'``; prompt_toolkit floor
+  raised to 3.0; ``six`` and the python 2 directives removed.
+
 3.0.3: 2022-05-16
 -----------------
 
