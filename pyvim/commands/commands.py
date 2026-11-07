@@ -428,8 +428,9 @@ def pwd(editor):
 @location_cmd('cd', accepts_force=False)
 def cd(editor, location):
     "Change working directory."
+    target = os.path.expanduser(location or '~')
     try:
-        os.chdir(location)
+        os.chdir(target)
     except OSError as e:
         editor.show_message('{}'.format(e))
 
