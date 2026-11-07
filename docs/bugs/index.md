@@ -1,7 +1,7 @@
 ---
 type: index
 title: "pyvim Findings Bundle"
-description: "OKF v0.2 findings bundle for the pyvim bug audit: 37 machine-verified findings from the deep review at hg rev 164 (2026-11-06)."
+description: "OKF v0.2 findings bundle for the pyvim bug audit: 61 machine-verified findings across Round 1 (hg rev 164, 2026-11-06, 001–037, closed) and Round 2 (hg rev 191, 2026-11-07, 038–061, open)."
 status: stable
 sources:
   - docs/bugs/
@@ -10,29 +10,68 @@ verified: machine-confirmed
 stale_after: 2027-01-01T00:00:00Z
 tags: [bugs, findings, audit]
 generated:
-  by: "OpenCode (GLM-5.3-Flash)"
-  at: "2026-11-06T12:12:00Z"
-timestamp: "2026-11-06T12:12:00Z"
+  by: "Antigravity (Gemini 4 Argon)"
+  at: "2026-11-07T07:28:00Z"
+timestamp: "2026-11-07T07:28:00Z"
 ---
 
 # pyvim Findings Bundle
 
-Findings from the 2026-11-06 deep review of the pyvim codebase (`pyvim/`,
+This bundle tracks machine-verified audit findings for `pyvim` (`pyvim/`,
 `tests/`, `tools/`, `setup.py`, and verification of the implemented plans in
 [`../thai_support_plan.md`](../thai_support_plan.md) /
-[`../speed_latency_plan.md`](../speed_latency_plan.md)).
+[`../speed_latency_plan.md`](../speed_latency_plan.md)):
 
-Verified against prompt_toolkit 3.0.53 source, live micro-probes, the test
-suite (68 passed), `mypy .` (40 files clean) and `tools/bench_plans.py`
-(figures reproduced). At review time no code was changed.
+* **Round 1 (2026-11-06, hg rev 164 — [001](001.md)–[037](037.md), `fix_status: fixed`)**: 16 defects and 21 improvements verified against `prompt_toolkit 3.0.53`, live micro-probes, the test suite (68 passed), `mypy .` (40 files clean), and `tools/bench_plans.py`. Closed in hg rev 167–195 (100 tests, 43-file mypy baseline at the 3.10 floor, ruff clean).
+* **Round 2 (2026-11-07, hg rev 191 — [038](038.md)–[061](061.md), `fix_status: open`)**: 17 defects ([038](038.md)–[054](054.md)) and 7 improvements ([055](055.md)–[061](061.md)) uncovered during the follow-up full-project audit at hg rev 191 (`369831e8f7b8`). Report-only — no source code modified yet.
 
-**Resolution note (2026-11-06 fix arc):** every finding below has since been
+## Round 2 Open Findings (2026-11-07, hg rev 191)
+
+### Defects (`type: bug`, `fix_status: open`)
+
+| ID | Finding | Area | Priority |
+| :--- | :--- | :--- | :--- |
+| [038](038.md) | `_delete_cell_clusters` raises `UnboundLocalError` on `X` at column 0 or `x` on an empty line | key-bindings/thai | **high** |
+| [039](039.md) | `indent_line` (`<C-t>` in Insert mode) raises `AttributeError: 'KeyPressEvent' object has no attribute 'application'` | key-bindings | **high** |
+| [040](040.md) | `TabPage._close_window` closes `active_window` instead of target `window` and mutates splits during iteration | window-arrangement | **high** |
+| [041](041.md) | `WindowArrangement.close_window` (`:hide`) on the last window of a tab leaves an empty `VSplit` and crashes rendering | window-arrangement/layout | **high** |
+| [042](042.md) | Visual mode (`v`) slices Thai/Lao cell clusters in half and ignores cell-cluster motions | thai/visual-mode | **high** |
+| [043](043.md) | Inclusive Vi motions (`dge`, `dgE`, `df`, `dt`, `dT`) slice Thai/Lao cell clusters and fuse combining marks | thai/motion | **high** |
+| [044](044.md) | `DocumentWordsCompleter` regex (`\w+`) strips Thai/Lao combining marks (`GC=Mn`) and fails to complete Thai words | completion/thai | **high** |
+| [045](045.md) | `report_pyflakes` treats `pyflakes` UTF-8 byte `col_offset` as codepoint index and restricts identifiers to ASCII | reporting/unicode | medium |
+| [046](046.md) | `ReporterError` lacks `__eq__`, defeating `report_errors != self.report_errors` deduplication in `run_reporter` | reporting/redraw | medium |
+| [047](047.md) | `:cd` without an argument raises uncaught `TypeError` and skips `os.path.expanduser` | commands/io | medium |
+| [048](048.md) | `substitute` (`:s`) raises uncaught `re.error` on invalid regex or replacement escapes | commands/substitute | medium |
+| [049](049.md) | Opening `~` or `~/dir` fails with `IsADirectoryError` because `DirectoryIO` and `FileIO.can_open_location` omit `expanduser` | io/file-explorer | medium |
+| [050](050.md) | `EditorBuffer.write` and `:w` mutate `location` before validation, skip `expanduser` on overwrite check, and miss reporter/lexer refresh | io/editor-buffer/lexer | medium |
+| [051](051.md) | `:colo <scheme>` is registered in `commands.py` but rejected by `COMMAND_GRAMMAR` and ignored by `CommandPreviewer` | commands/grammar/preview | low |
+| [052](052.md) | `BufferListOverlay` checks `location in c.display` (`FormattedText` list, always `False`) and triggers on `:buffers` | layout/completion | low |
+| [053](053.md) | `reverse_case_cell` (`~`) overrides `:set tildeop` unconditionally and ignores `event.arg` | key-bindings/vi-mode | low |
+| [054](054.md) | Miscellaneous logic defects (`is_thai_base` digits, `close_buffer` tab index, `hsplit`/`vsplit` assert, preview mismatches, `ignorecase`, file explorer, `tabstop`, `_try_char`) | thai/window-arrangement/commands/layout | low |
+
+### Improvements & cleanup (`type: improvement`, `fix_status: open`)
+
+| ID | Finding | Category | Priority |
+| :-- | :--- | :--- | :--- |
+| [055](055.md) | `substitute` (`:s`) runs `re.sub` twice per line and rebuilds `Document` on zero matches | performance | medium |
+| [056](056.md) | `_ThaiTextGate.note` scans the whole buffer per keystroke on non-ASCII non-Thai files, and word motions check `doc.text.isascii()` | performance | medium |
+| [057](057.md) | `DocumentLexer` joins lines to EOF per edit and `_sanitize_and_invalidate_sara_am` inflates sparse `Screen.data_buffer` rows/columns | performance | low |
+| [058](058.md) | Dead code inventory (round 2: `_current_window_for_event`, `TABSTOP_DOT`, unreachable `ENCODINGS` fallbacks, `_buffer` param, `ignore_case`, `_gate_fixture`) | dead code | low |
+| [059](059.md) | Duplicate code and logic inventory (round 2: duplicated comment block, `ENCODINGS` loop, `FileIO()` instantiation, redundant filter, active buffer lookup) | duplication | low |
+| [060](060.md) | Readability and test hygiene inventory (round 2: 1-tuple `super`, `cls` parameter, `bytes` shadowing, docstrings, `__import__`, `conftest` `~/.pyvim`) | readability/hygiene | low |
+| [061](061.md) | Plan and benchmark drift (round 2: corrupted code fence in `thai_support_plan.md`, P2 `bench_plans.py` calculation, stale metadata) | documentation/benchmark | low |
+
+---
+
+## Round 1 Closed Findings (2026-11-06, hg rev 164 → fixed in rev 167–195)
+
+**Resolution note (2026-11-06 fix arc):** every Round 1 finding below has been
 fixed and machine-re-verified (hg rev 167–195: 100 tests,
 43-file mypy baseline at the 3.10 floor, ruff clean, bench reproducing). Each
 document's frontmatter carries `fix_status: fixed (hg rev N)`; the fix-verdict
 revisions are also summarized in [`log.md`](log.md).
 
-## Defects (`type: bug`)
+### Defects (`type: bug`, `fix_status: fixed`)
 
 | ID | Finding | Area | Priority |
 | :--- | :--- | :--- | :--- |
@@ -53,7 +92,7 @@ revisions are also summarized in [`log.md`](log.md).
 | [015](015.md) | `:1,3s/…` cursor targets end-of-range even without substitutions (upstream FIXME) | commands | low |
 | [016](016.md) | `loop` bound only on the PTK3 branch in `run_reporter` | reporter | low |
 
-## Improvements & cleanup (`type: improvement`)
+### Improvements & cleanup (`type: improvement`, `fix_status: fixed`)
 
 | ID | Finding | Category | Priority |
 | :-- | :--- | :--- | :--- |

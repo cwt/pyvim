@@ -8,8 +8,8 @@ sources:
 verified: machine-confirmed
 generated:
   by: "Antigravity (Gemini 4 Argon)"
-  at: "2026-11-06T08:00:00Z"
-timestamp: 2026-11-06T08:00:00Z
+  at: "2026-11-07T07:28:00Z"
+timestamp: 2026-11-07T07:28:00Z
 ---
 
 # Documentation Bundle Log
@@ -27,3 +27,4 @@ This file tracks all modifications, extensions, and updates to the `pyvim` OKF d
 | 2026-11-06T12:12:00Z | [bugs/](bugs/index.md), [index.md](index.md) | Created / Updated | Added the findings bundle `docs/bugs/` (OKF v0.2): 37 machine-verified findings from the deep review at hg rev 164 — 16 defects ([001](bugs/001.md)–[016](bugs/016.md), incl. two high-priority performance findings) and 21 improvements ([017](bugs/017.md)–[037](bugs/037.md), covering dead code, duplication, perf, packaging, readability, docs drift and toolchain). Linked from `index.md`. |
 | 2026-11-06T13:00:00Z | [bugs/](bugs/index.md) | Updated / findings closed | After the 2026-11-06 fix arc (hg rev 167–195), all 37 findings are fixed and machine-verified (100+ tests, mypy at the 3.10 floor, ruff, bench). Every finding doc records `fix_status: fixed (hg rev N)`. |
 | 2026-11-06T16:27:00Z | [vith_rebrand_plan.md](vith_rebrand_plan.md), [index.md](index.md) | Created | Filed the **execute-on-next-week** plan for the `vith` (วิธ) re-brand & packaging modernization: package rename with `_vith_*` marker sweep, BSD 3-clause kept with stacked copyright (© 2015 Jonathan Slenders + © 2026 Chaiwat Suttipongsakul — no MIT relicense), `setup.py` → `pyproject.toml` (PEP 621), `README.rst` → `README.md`, user-data fallback decision, version-lineage decision (rec. reset 1.0.0), docs name-mapping notes, and the full gate checklist (tests/mypy/ruff/bench/boot smoke) plus the 3-commit structure. Status: `draft`; the runtime-experiments arc of the same date (event loop / free-threading / PyPy) is recorded as retired-with-evidence in this bundle's log and the talyn repo's BUG-416..418. |
+| 2026-11-07T07:28:00Z | [bugs/](bugs/index.md), [bugs/038.md](bugs/038.md)…[bugs/061.md](bugs/061.md), [index.md](index.md) | Appended (Round 2) | Appended 24 machine-verified Round 2 audit findings (`038`–`061`, `fix_status: open`) from the full-project review at hg rev 191 (`369831e8f7b8`): 17 defects (`038`–`054`) and 7 improvements (`055`–`061`), and updated `docs/bugs/index.md`, `docs/bugs/log.md`, and `docs/index.md`. |

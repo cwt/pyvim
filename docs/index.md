@@ -8,8 +8,8 @@ sources:
 verified: machine-confirmed
 generated:
   by: "Antigravity (Gemini 4 Argon)"
-  at: "2026-11-06T08:00:00Z"
-timestamp: "2026-11-06T08:00:00Z"
+  at: "2026-11-07T07:28:00Z"
+timestamp: "2026-11-07T07:28:00Z"
 ---
 
 # pyvim Documentation Bundle
@@ -24,7 +24,9 @@ This directory contains the [Open Knowledge Format (OKF v0.2)](https://github.co
 
 ## Audit & Findings
 
-* [Findings Bundle](bugs/index.md) — **Closed (2026-11-06)**: 37 machine-verified findings from the deep review at hg rev 164 — defects 001–016 (`type: bug`, incl. two high-priority performance findings in the Thai hot paths and several uncaught-exception paths) and improvements 017–037 (`type: improvement`: dead code, duplication, legacy weight, packaging/toolchain, readability, docs drift). All fixed during the 2026-11-06 fix arc; every doc records its fix revision.
+* [Findings Bundle](bugs/index.md) — **61 findings across 2 audit rounds**:
+  * **Round 2 (2026-11-07, hg rev 191 — open)**: 24 machine-verified findings ([038](bugs/038.md)–[061](bugs/061.md)) — 17 defects (`type: bug`, including 7 high-priority crashes and Thai/Lao Visual mode, inclusive motion, and word-completion bugs) and 7 improvements (`type: improvement`: performance, dead code, duplication, readability/test hygiene, and plan/benchmark drift).
+  * **Round 1 (2026-11-06, hg rev 164 — closed in rev 167–195)**: 37 machine-verified findings ([001](bugs/001.md)–[037](bugs/037.md)) — defects 001–016 and improvements 017–037, all fixed with recorded hg revisions.
 
 ## Meta
 
