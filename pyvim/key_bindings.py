@@ -7,6 +7,7 @@ from prompt_toolkit.filters import (
     is_read_only,
     vi_insert_mode,
     vi_navigation_mode,
+    vi_selection_mode,
 )
 from prompt_toolkit.filters.app import (
     vi_replace_single_mode,
@@ -283,7 +284,7 @@ def create_key_bindings(editor):
             buff.delete(count=span)
             buff.insert_text(cluster.swapcase(), overwrite=False)
 
-    @kb.add('$', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    @kb.add('$', filter=(vi_navigation_mode | vi_selection_mode) & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_line_cell(event):
         """
         Move cursor to the start of the last cell cluster on the current line.
@@ -304,14 +305,14 @@ def create_key_bindings(editor):
         if end:
             buff.cursor_position = prev_cell_offset(doc.text, buff.cursor_position + end, 1)
 
-    @kb.add('e', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    @kb.add('e', filter=(vi_navigation_mode | vi_selection_mode) & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_word_cell(event):
         """
         Move cursor to the base character of the last cell cluster of the word.
         """
         _move_to_end_of_word_cell(event, WORD=False)
 
-    @kb.add('E', filter=vi_navigation_mode & ~vi_waiting_for_text_object_mode)
+    @kb.add('E', filter=(vi_navigation_mode | vi_selection_mode) & ~vi_waiting_for_text_object_mode)
     def move_to_end_of_big_word_cell(event):
         """
         Move cursor to the base character of the last cell cluster of the WORD.

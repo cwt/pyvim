@@ -29,11 +29,11 @@ import re
 import threading
 import unicodedata
 from functools import lru_cache
-from typing import Any, Callable, Pattern
+from typing import Any, Callable, Iterable, Pattern
 
 import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.document import Document
-from prompt_toolkit.filters.app import vi_navigation_mode
+from prompt_toolkit.filters.app import vi_mode, vi_navigation_mode, vi_selection_mode
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent, KeyProcessor
 from prompt_toolkit.layout.screen import Char, Screen
 from prompt_toolkit.utils import get_cwidth
@@ -848,9 +848,9 @@ def _kp_fix_vi_cursor_position(self: KeyProcessor, event: KeyPressEvent) -> None
     doc = buff.document
     line = doc.current_line
 
-    if vi_navigation_mode() and len(line) > 0:
+    if (vi_navigation_mode() or vi_selection_mode()) and len(line) > 0:
         col = doc.cursor_position_col
-        if doc.is_cursor_at_the_end_of_line:
+        if vi_navigation_mode() and doc.is_cursor_at_the_end_of_line:
             target_col = prev_cell_offset(line, len(line), 1)
         else:
             target_col = snap_to_cell_start(line, col)
@@ -1054,6 +1054,47 @@ _ORIGINAL_DOCUMENT_METHODS: dict[str, Callable[..., Any]] = {}
 # Originals for the KeyProcessor patches (mirrors `_ORIGINAL_DOCUMENT_METHODS`).
 _ORIGINAL_KEY_PROCESSOR_METHODS: dict[str, Callable[..., Any]] = {}
 
+def _thai_selection_ranges(self) -> Iterable[tuple[int, int]]:
+    """Thai-aware wrapper for `Document.selection_ranges`."""
+    orig = _ORIGINAL_DOCUMENT_METHODS.get("selection_ranges")
+    if orig is None:
+        # Fallback to the (unpatched) bound method.
+        orig = type(self).selection_ranges
+    for from_, to in orig(self):
+        if vi_mode() and to > from_ and to <= len(self.text):
+            last_idx = to - 1
+            row, col = self.translate_index_to_position(last_idx)
+            if row < len(self.lines):
+                line = self.lines[row]
+                cluster_end_col = next_cell_offset(line, col, 1)
+                new_to = self.translate_row_col_to_index(row, cluster_end_col)
+                if new_to > to:
+                    to = new_to
+        yield from_, to
+
+
+def _thai_selection_range_at_line(self, row: int) -> tuple[int, int] | None:
+    """Thai-aware wrapper for `Document.selection_range_at_line`."""
+    orig = _ORIGINAL_DOCUMENT_METHODS.get("selection_range_at_line")
+    if orig is None:
+        orig = type(self).selection_range_at_line
+    res = orig(self, row)
+    if res is None:
+        return None
+    start, end = res
+    if vi_mode() and end > start and end <= len(self.text):
+        last_idx = end - 1
+        r, col = self.translate_index_to_position(last_idx)
+        if r < len(self.lines):
+            line = self.lines[r]
+            cluster_end_col = next_cell_offset(line, col, 1)
+            new_end = self.translate_row_col_to_index(r, cluster_end_col)
+            if new_end > end:
+                end = new_end
+    return start, end
+
+
+
 _DOCUMENT_PATCH_SPECS: tuple[tuple[str, tuple[str, ...], Callable[..., object]], ...] = (
     ("get_cursor_left_position", ("self", "count"), _doc_get_cursor_left_position),
     ("get_cursor_right_position", ("self", "count"), _doc_get_cursor_right_position),
@@ -1093,6 +1134,8 @@ _DOCUMENT_PATCH_SPECS: tuple[tuple[str, tuple[str, ...], Callable[..., object]],
         ("self", "WORD", "include_leading_whitespace", "include_trailing_whitespace"),
         find_boundaries_of_current_word,
     ),
+    ("selection_ranges", ("self",), _thai_selection_ranges),
+    ("selection_range_at_line", ("self", "row"), _thai_selection_range_at_line),
 )
 
 
