@@ -12,6 +12,7 @@ sources:
   - ../pyvim/layout.py
   - ../tools/bench_plans.py
   - ../tests/test_thai.py
+  - ../tests/test_thai_motions.py
 verified: machine-confirmed
 stale_after: 2027-01-01T00:00:00Z
 tags: [thai, lao, unicode, sara-am, cursor-movement, vi-mode, prompt-toolkit, szn, implemented]
@@ -23,7 +24,7 @@ timestamp: 2026-11-06T08:00:00Z
 
 # Thai & Lao Script Support Plan for `pyvim`
 
-This document specifies the root causes of broken Thai/Lao cursor navigation, editing, and terminal rendering in `pyvim`, and details how to adapt the cell-cluster and renderer architecture from `szn` (`src/thai.zig`, `src/grid.zig`, `src/mode_copy.zig`, `src/server/render.zig`) into `pyvim` with sub-microsecond (`< 1 µs`) per-keypress overhead[^src-thai][^src-key-bindings][^src-layout][^src-bench]. **Status: all of Phases 1–4 are implemented and machine-verified** (`pyvim/thai.py`, `pyvim/key_bindings.py`, `pyvim/editor.py`, and 13 unit tests in `tests/test_thai.py`[^src-test-thai], 68 total tests passing, Python 3.10+ AST and mypy clean).
+This document specifies the root causes of broken Thai/Lao cursor navigation, editing, and terminal rendering in `pyvim`, and details how to adapt the cell-cluster and renderer architecture from `szn` (`src/thai.zig`, `src/grid.zig`, `src/mode_copy.zig`, `src/server/render.zig`) into `pyvim` with sub-microsecond (`< 1 µs`) per-keypress overhead[^src-thai][^src-key-bindings][^src-layout][^src-bench]. **Status: all of Phases 1–4 are implemented and machine-verified** (`pyvim/thai.py`, `pyvim/key_bindings.py`, `pyvim/editor.py`, and 18 unit tests in `tests/test_thai.py` and 6 in `tests/test_thai_motions.py`, 100+ total tests passing, Python 3.10+ AST and mypy clean).
 
 ---
 
@@ -344,7 +345,7 @@ Running `python tools/bench_plans.py` confirms all cell stops, reverse `prev_cel
 
 ### 4.1 Architectural Safeguard: Version Gating & Fallbacks (`prompt_toolkit >=2.0.0,<3.1.0`)
 
-Because `setup.py:20` declares `prompt_toolkit>=2.0.0,<3.1.0`[^src-setup], `install_prompt_toolkit_thai_patches()` in `pyvim/thai.py` (called once from `Editor.__init__` in `pyvim/editor.py`[^src-editor]) guards every hook with:
+Because `setup.py:24` declares `prompt_toolkit>=3.0.0,<3.1.0`[^src-setup], `install_prompt_toolkit_thai_patches()` in `pyvim/thai.py` (called once from `Editor.__init__` in `pyvim/editor.py`[^src-editor]) guards every hook with:
 1. **Explicit attribute and `inspect.signature` checks** before wrapping `Document.get_cursor_left_position`, `Document.get_cursor_right_position`, `Document.get_cursor_up_position`, `Document.get_cursor_down_position`, and `prompt_toolkit.renderer._output_screen_diff`.
 2. **Startup self-test** verifying `Document("ที่ดิน", cursor_position=0).get_cursor_right_position(1) == 3`.
 3. **Graceful fallback** restoring the original function and logging a warning if a future or non-standard `prompt_toolkit` build alters the expected signature.
@@ -519,6 +520,8 @@ def _sanitize_and_invalidate_sara_am(
                     prev_row[x] = _SARA_AM_POISON
 
 
+```
+
 > **Implementation update (hg rev 170, 174)**: the shipped versions of
 > `_sanitize_and_invalidate_sara_am` / `_install_renderer_patch` returned
 > `bool`, use `setattr`, keep the original via `_pyvim_original`, guard
@@ -527,6 +530,7 @@ def _sanitize_and_invalidate_sara_am(
 > sessions skip it entirely (`docs/bugs/002.md`). The rollback in §4.1
 > also restores both `KeyProcessor` patches (`docs/bugs/005.md`).
 
+```python
 def _install_renderer_patch() -> None:
     orig_diff = getattr(ptk_renderer, "_output_screen_diff", None)
     if orig_diff is None or getattr(orig_diff, "_pyvim_thai_patched", False):
@@ -568,7 +572,7 @@ We will add `tests/test_thai.py` covering every layer and edge case:
 
 ### 5.1 Implementation Record & Refinements Beyond Initial Draft (2026-11-06)
 
-* **Implemented Modules**: [`pyvim/thai.py`](../pyvim/thai.py)[^src-thai], [`pyvim/key_bindings.py`](../pyvim/key_bindings.py)[^src-key-bindings], [`pyvim/editor.py`](../pyvim/editor.py)[^src-editor], and [`tests/test_thai.py`](../tests/test_thai.py)[^src-test-thai] (13 unit tests in `tests/test_thai.py`, 68 total passing; verified with `mypy --python-version 3.10` and `ast.parse(..., feature_version=(3, 10))`).
+* **Implemented Modules**: [`pyvim/thai.py`](../pyvim/thai.py)[^src-thai], [`pyvim/key_bindings.py`](../pyvim/key_bindings.py)[^src-key-bindings], [`pyvim/editor.py`](../pyvim/editor.py)[^src-editor], and [`tests/test_thai.py`](../tests/test_thai.py)[^src-test-thai] (18 unit tests in `tests/test_thai.py` and 6 in `tests/test_thai_motions.py`, 100+ total passing; verified with `mypy --python-version 3.10` and `ast.parse(..., feature_version=(3, 10))`).
 * **Refinements Discovered During Implementation**:
   1. **`KeyProcessor._fix_vi_cursor_position` Cell-Cluster Clamp**: `prompt_toolkit`'s `KeyProcessor._call_handler` invokes `_fix_vi_cursor_position` after every Vi command, which previously executed `buff.cursor_position -= 1` whenever the cursor reached EOL in Navigation mode — parking the cursor on a trailing combining mark (e.g. `◌่` at `col=6` of `"ผู้ใหญ่"`). `install_prompt_toolkit_thai_patches()` wraps `_fix_vi_cursor_position` to clamp to `prev_cell_offset(line, len(line), 1)` at EOL and `snap_to_cell_start(line, col)` mid-line.
   2. **`Document.find_start_of_previous_word` & `find_boundaries_of_current_word` + Normal-Mode `e`/`E`**: In `prompt_toolkit/key_binding/bindings/vi.py`, `b`/`B` call `Document.find_start_of_previous_word` (rather than `find_previous_word_beginning`), `iw`/`aw`/`*`/`#` call `Document.find_boundaries_of_current_word`, and `e`/`E` compute `end - 1` (which would land on a trailing combining mark in Normal mode when a word ends with `base + comb*`). Wrapping `find_start_of_previous_word` and `find_boundaries_of_current_word` and binding Normal-mode `e`/`E` (`~vi_waiting_for_text_object_mode`) to `prev_cell_offset(doc.text, pos + end, 1)` keeps both Normal-mode `e` and operator-pending `de`/`ce`/`ye` cell-cluster-safe.
@@ -578,7 +582,7 @@ We will add `tests/test_thai.py` covering every layer and edge case:
 
 ## References
 
-[^src-setup]: `setup.py` (`install_requires` specifying `prompt_toolkit>=2.0.0,<3.1.0`) — [../setup.py](../setup.py)
+[^src-setup]: `setup.py` (`install_requires` specifying `prompt_toolkit>=3.0.0,<3.1.0`) — [../setup.py](../setup.py)
 [^src-thai]: `pyvim/thai.py` (Thai & Lao cell-cluster scanners, two-tier word breaking, SARA AM renderer pre-pass, version-gated `prompt_toolkit` patch installer) — [../pyvim/thai.py](../pyvim/thai.py)
 [^src-editor]: `pyvim/editor.py` (`Editor._create_application`, `Editor.__init__`) — [../pyvim/editor.py](../pyvim/editor.py)
 [^src-key-bindings]: `pyvim/key_bindings.py` (`create_key_bindings`) — [../pyvim/key_bindings.py](../pyvim/key_bindings.py)

@@ -93,7 +93,7 @@ printed as a single implementation number (P1a/P1b/P1c) with the
 ### 1.3 Implementation Record (rev 161–162, 2026-11-06)
 
 * **Implementation (rev 161, `024e7f40f812`)**: P0–P5 landed as one verified changeset — 8 modified source files plus six new test modules (42 tests): [`tests/test_editor_buffer.py`](../tests/test_editor_buffer.py) (P0/P5, 9 tests), [`tests/test_lexer.py`](../tests/test_lexer.py) (P1, 5), [`tests/test_style.py`](../tests/test_style.py) (P2, 7), [`tests/test_completion.py`](../tests/test_completion.py) (P3, 8), [`tests/test_layout.py`](../tests/test_layout.py) (P4, 7), [`tests/test_io_backends.py`](../tests/test_io_backends.py) (P5, 6).[^src-tests]
-* **Mypy sweep (rev 162, `e8122198d2b2`)**: added [`mypy.ini`](../mypy.ini)[^src-mypy] (`python_version = 3.15`, `ignore_missing_imports`) and fixed the 9 pre-existing code-level errors: two `no-redef` misnamed handler defs (`pwd` → `cd` for `:cd`; `set_scroll_offset` → `set_colorcolumn` for `:colorcolumn`; registration is decorator-driven, so the renames are behavior-neutral), four unannotated module-level tables in `pyvim/commands/commands.py`, `six.with_metaclass(ABCMeta, object)` → `metaclass=ABCMeta` in `pyvim/io/base.py`, and a targeted `# type: ignore[attr-defined]` on the legacy PTK2-only `prompt_toolkit.eventloop` import in `pyvim/editor_buffer.py`. `mypy .` is clean (43 files as of hg rev 190, checked against the 3.10 packaging floor); 100 tests pass.
+* **Mypy sweep (rev 162, `e8122198d2b2`)**: added [`mypy.ini`](../mypy.ini)[^src-mypy] (`python_version = 3.10`, `ignore_missing_imports`) and fixed the 9 pre-existing code-level errors: two `no-redef` misnamed handler defs (`pwd` → `cd` for `:cd`; `set_scroll_offset` → `set_colorcolumn` for `:colorcolumn`; registration is decorator-driven, so the renames are behavior-neutral), four unannotated module-level tables in `pyvim/commands/commands.py`, `six.with_metaclass(ABCMeta, object)` → `metaclass=ABCMeta` in `pyvim/io/base.py`, and a targeted `# type: ignore[attr-defined]` on the legacy PTK2-only `prompt_toolkit.eventloop` import in `pyvim/editor_buffer.py`. `mypy .` is clean (43 files as of hg rev 190, checked against the 3.10 packaging floor); 100 tests pass.
 
 ### 1.4 Deviations & Fixes Beyond the Original Spec
 
@@ -149,11 +149,10 @@ And in `EditorBuffer.run_reporter` (`pyvim/editor_buffer.py:174-217`), preservin
         # 2. Acquire the running event loop BEFORE setting _reporter_is_running.
         #    If called before Application.run() (e.g. CLI startup on Python 3.14+),
         #    leave _reporter_is_running = False so Editor.run() can trigger it.
-        if PTK3:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
 
         if self._reporter_is_running:
             self._run_reporter_again = True
@@ -185,14 +184,9 @@ And in `EditorBuffer.run_reporter` (`pyvim/editor_buffer.py:174-217`), preservin
                     self._run_reporter_again = False
                     self.run_reporter()
 
-            if PTK3:
-                loop.call_soon_threadsafe(ready)
-            else:
-                call_from_executor(ready)
+            loop.call_soon_threadsafe(ready)
 
-        if PTK3:
-            loop.run_in_executor(None, in_executor)
-        else:
+        loop.run_in_executor(None, in_executor)
             run_in_executor(in_executor)
 ```
 
@@ -342,7 +336,12 @@ And in `ReportMessageToolbar` (`pyvim/layout.py:278-288`):
             lineno = eb.buffer.document.cursor_position_row
             errors = eb.report_errors_by_line.get(lineno)
             if errors:
-                return errors[0].formatted_text
+                fragments = []
+                for i, error in enumerate(errors):
+                    if i:
+                        fragments.append(('', '  '))
+                    fragments.extend(error.formatted_text)
+                return fragments
             return []
 ```
 
@@ -374,4 +373,4 @@ And in `ReportMessageToolbar` (`pyvim/layout.py:278-288`):
 [^src-backends]: `pyvim/io/backends.py` (`FileIo`, `GZipFileIo`) — [../pyvim/io/backends.py](../pyvim/io/backends.py)
 [^src-bench]: `tools/bench_plans.py` (Reproducible cell-cluster & latency benchmark script) — [../tools/bench_plans.py](../tools/bench_plans.py)
 [^src-tests]: `tests/test_editor_buffer.py`, `tests/test_lexer.py`, `tests/test_style.py`, `tests/test_completion.py`, `tests/test_layout.py`, `tests/test_io_backends.py` (unit tests pinning P0–P5 behaviour, added in hg rev 161) — [../tests/](../tests/)
-[^src-mypy]: `mypy.ini` (mypy baseline: `python_version = 3.15`, `ignore_missing_imports`; added in hg rev 162) — [../mypy.ini](../mypy.ini)
+[^src-mypy]: `mypy.ini` (mypy baseline: `python_version = 3.10`, `ignore_missing_imports`; added in hg rev 162) — [../mypy.ini](../mypy.ini)

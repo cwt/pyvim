@@ -126,6 +126,7 @@ def bench_speed_plan() -> None:
 
     t0 = time.perf_counter()
     styles = generate_built_in_styles()
+    _ = [styles[name] for name in get_all_styles()]
     p2_eager_ms = p2_get_all_ms + (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
