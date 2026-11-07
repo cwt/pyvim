@@ -41,7 +41,9 @@ try:
 except Exception:  # pragma: no cover
     _PtkTextObject = None  # type: ignore[assignment,misc]
     _PtkTextObjectType = None  # type: ignore[assignment,misc]
+from prompt_toolkit.data_structures import Point
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent, KeyProcessor
+from prompt_toolkit.layout.containers import _CHAR_CACHE, Window
 from prompt_toolkit.layout.screen import Char, Screen
 from prompt_toolkit.utils import get_cwidth
 
@@ -1009,6 +1011,150 @@ def _sanitize_and_invalidate_sara_am(
                     prev_row[x] = _SARA_AM_POISON
 
 
+_AUTOWRAP_ARM_TAG = "\x00_PYVIM_THAI_AUTOWRAP_\x00"
+
+
+def _install_window_copy_body_patch() -> bool:
+    """
+    Wrap `prompt_toolkit.layout.containers.Window._copy_body` so zero-width
+    combining marks (`GC=Mn`, `char_width == 0`) immediately following a base
+    character in the rightmost column of a `Window` (`x == width - 1`, or
+    `x == width - 2` for a double-width base) are merged into that rightmost
+    cell instead of being dropped when `x` advances to `width`.
+    """
+    orig_copy_body = getattr(Window, "_copy_body", None)
+    if orig_copy_body is None:
+        logger.warning("Window._copy_body not found; skipping right-margin patch.")
+        return False
+    if getattr(orig_copy_body, "_pyvim_thai_patched", False):
+        return True
+
+    try:
+        params = list(inspect.signature(orig_copy_body).parameters.keys())
+    except (TypeError, ValueError):
+        logger.warning("Could not inspect Window._copy_body signature; skipping patch.")
+        return False
+
+    if len(params) < 6 or params[:6] != [
+        "self",
+        "ui_content",
+        "new_screen",
+        "write_position",
+        "move_x",
+        "width",
+    ]:
+        logger.warning(
+            "Unexpected Window._copy_body parameters %r; skipping right-margin patch.",
+            params,
+        )
+        return False
+
+    def _patched_copy_body(
+        self: Any,
+        ui_content: Any,
+        new_screen: Screen,
+        write_position: Any,
+        move_x: int,
+        width: int,
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[dict[int, tuple[int, int]], dict[tuple[int, int], tuple[int, int]]]:
+        visible_line_to_row_col, rowcol_to_yx = orig_copy_body(
+            self,
+            ui_content,
+            new_screen,
+            write_position,
+            move_x,
+            width,
+            *args,
+            **kwargs,
+        )
+        if width <= 0 or write_position.height <= 0 or not rowcol_to_yx:
+            return visible_line_to_row_col, rowcol_to_yx
+
+        xpos = write_position.xpos + move_x
+        ypos = write_position.ypos
+        right_x = xpos + width - 1
+        data_buffer = new_screen.data_buffer
+
+        # O(window_height) fast-path: only inspect `rowcol_to_yx` if at least
+        # one visible row actually has a non-ASCII base character in the
+        # rightmost column of this window.
+        candidate_rows: set[int] = set()
+        for sy in range(ypos, ypos + write_position.height):
+            if sy in data_buffer:
+                row_buf = data_buffer[sy]
+                cell = row_buf.get(right_x)
+                if cell is not None and cell.char and not cell.char.isascii():
+                    candidate_rows.add(sy)
+                    continue
+                if width >= 2:
+                    cell2 = row_buf.get(right_x - 1)
+                    if (
+                        cell2 is not None
+                        and cell2.width == 2
+                        and not cell2.char.isascii()
+                    ):
+                        candidate_rows.add(sy)
+
+        if not candidate_rows:
+            return visible_line_to_row_col, rowcol_to_yx
+
+        has_focus = bool(kwargs.get("has_focus", args[6] if len(args) > 6 else False))
+        line_chars_cache: dict[int, str] = {}
+        for (lineno, col), (sy, sx) in list(rowcol_to_yx.items()):
+            if sy not in candidate_rows:
+                continue
+            if sx != right_x and not (
+                width >= 2 and sx == right_x - 1 and data_buffer[sy][sx].width == 2
+            ):
+                continue
+            chars = line_chars_cache.get(lineno)
+            if chars is None:
+                chars = "".join(
+                    t
+                    for style, t, *_ in ui_content.get_line(lineno)
+                    if "[ZeroWidthEscape]" not in style
+                )
+                line_chars_cache[lineno] = chars
+            if col >= len(chars) or get_cwidth(chars[col]) == 0:
+                continue
+            j = col + 1
+            n = len(chars)
+            while j < n and get_cwidth(chars[j]) == 0:
+                j += 1
+            if j > col + 1:
+                comb = chars[col + 1 : j]
+                _THAI_GATE.note(comb)
+                prev_char = data_buffer[sy][sx]
+                if not prev_char.char.endswith(comb):
+                    data_buffer[sy][sx] = _CHAR_CACHE[
+                        prev_char.char + comb, prev_char.style
+                    ]
+                for c_idx in range(col + 1, j):
+                    rowcol_to_yx[lineno, c_idx] = (sy, sx)
+                # Keep the base character last in insertion order so mouse
+                # click reverse-lookup `{v: k for k, v in rowcol_to_yx.items()}`
+                # resolves `(sy, sx)` to `(lineno, col)`.
+                del rowcol_to_yx[lineno, col]
+                rowcol_to_yx[lineno, col] = (sy, sx)
+                cpos = ui_content.cursor_position
+                if (
+                    has_focus
+                    and cpos is not None
+                    and cpos.y == lineno
+                    and col < cpos.x < j
+                ):
+                    new_screen.set_cursor_position(self, Point(x=sx, y=sy))
+
+        return visible_line_to_row_col, rowcol_to_yx
+
+    setattr(_patched_copy_body, "_pyvim_thai_patched", True)
+    setattr(_patched_copy_body, "_pyvim_original", orig_copy_body)
+    Window._copy_body = _patched_copy_body  # type: ignore[method-assign]
+    return True
+
+
 def _install_renderer_patch() -> bool:
     """
     Wrap `prompt_toolkit.renderer._output_screen_diff` with signature verification.
@@ -1034,18 +1180,95 @@ def _install_renderer_patch() -> bool:
         )
         return False
 
-    def _wrapped_output_screen_diff(*args, **kwargs):
+    def _wrapped_output_screen_diff(*args: Any, **kwargs: Any) -> Any:
+        output = args[1] if len(args) > 1 else kwargs.get("output")
         screen = args[2] if len(args) > 2 else kwargs.get("screen")
         previous_screen = args[5] if len(args) > 5 else kwargs.get("previous_screen")
+        is_done = bool(args[7] if len(args) > 7 else kwargs.get("is_done", False))
         size = kwargs.get("size") or (args[11] if len(args) > 11 else None)
         # Skip the full-screen scan while the sticky gate says this session
         # has never rendered Thai/Lao text (see `docs/bugs/002.md`); once a
         # Thai-capable string was observed, always sanitize (unchanged
         # semantics).
-        if _THAI_GATE.value and screen is not None:
-            width = size.columns if size is not None else 80
-            _sanitize_and_invalidate_sara_am(screen, previous_screen, width)
-        return orig_diff(*args, **kwargs)
+        if not _THAI_GATE.value or screen is None:
+            return orig_diff(*args, **kwargs)
+
+        width = size.columns if size is not None else 80
+        _sanitize_and_invalidate_sara_am(screen, previous_screen, width)
+
+        # In VT100 terminals and multiplexers (such as `szn`), `_output_screen_diff`
+        # runs with `DECAWM` disabled (`\x1b[?7l`). When a base character is written
+        # at the rightmost terminal column (`width - 1`), `DECAWM` off prevents the
+        # cursor from entering the pending-wrap state (`cursor.x == width`), causing
+        # subsequent zero-width combining marks (`width == 0`) to attach to `width - 2`
+        # instead of `width - 1`. Temporarily enable `DECAWM` (`\x1b[?7h`) before
+        # emitting a multi-codepoint cluster in the last column and restore `\x1b[?7l`
+        # + clamp cursor to column `width` (`\x1b[{width}G`) immediately after.
+        saved_escapes: list[tuple[int, int, str]] = []
+        if (
+            not is_done
+            and output is not None
+            and width >= 1
+            and hasattr(output, "write")
+            and hasattr(output, "write_raw")
+        ):
+            max_y = size.rows if size is not None else screen.height
+            for y, new_row in screen.data_buffer.items():
+                if 0 <= y < max_y:
+                    target_col = -1
+                    cell = new_row.get(width - 1)
+                    if cell is not None and len(cell.char) > 1:
+                        target_col = width - 1
+                    elif width >= 2:
+                        cell2 = new_row.get(width - 2)
+                        if (
+                            cell2 is not None
+                            and cell2.width == 2
+                            and len(cell2.char) > 1
+                        ):
+                            target_col = width - 2
+                    if target_col >= 0:
+                        zw_row = screen.zero_width_escapes[y]
+                        old_esc = zw_row.get(target_col, "")
+                        saved_escapes.append((y, target_col, old_esc))
+                        zw_row[target_col] = old_esc + _AUTOWRAP_ARM_TAG
+
+        if not saved_escapes or output is None:
+            return orig_diff(*args, **kwargs)
+
+        orig_write = output.write
+        orig_write_raw = output.write_raw
+        armed = False
+        reset_seq = f"\x1b[?7l\x1b[{width}G"
+
+        def _wrapped_write_raw(data: str) -> None:
+            nonlocal armed
+            if _AUTOWRAP_ARM_TAG in data:
+                data = data.replace(_AUTOWRAP_ARM_TAG, "\x1b[?7h")
+                armed = True
+            orig_write_raw(data)
+
+        def _wrapped_write(data: str) -> None:
+            nonlocal armed
+            orig_write(data)
+            if armed:
+                armed = False
+                orig_write_raw(reset_seq)
+
+        output.write = _wrapped_write  # type: ignore[method-assign]
+        output.write_raw = _wrapped_write_raw  # type: ignore[method-assign]
+        try:
+            return orig_diff(*args, **kwargs)
+        finally:
+            output.write = orig_write  # type: ignore[method-assign]
+            output.write_raw = orig_write_raw  # type: ignore[method-assign]
+            for y, col_idx, old_esc in saved_escapes:
+                zw_row = screen.zero_width_escapes.get(y)
+                if zw_row is not None:
+                    if old_esc:
+                        zw_row[col_idx] = old_esc
+                    else:
+                        zw_row.pop(col_idx, None)
 
     setattr(_wrapped_output_screen_diff, "_pyvim_thai_patched", True)
     setattr(_wrapped_output_screen_diff, "_pyvim_original", orig_diff)
@@ -1244,6 +1467,7 @@ def install_prompt_toolkit_thai_patches() -> bool:
         logger.warning("Falling back to unpatched prompt_toolkit Document: %s", exc)
         return False
 
+    _install_window_copy_body_patch()
     _install_renderer_patch()
     return True
 

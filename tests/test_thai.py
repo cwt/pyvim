@@ -707,3 +707,192 @@ def test_prev_cell_offset_never_crosses_newline(monkeypatch) -> None:
     # " mark preceded by \n " - walk stops just before the newline.
     text_leading_mark = "ab\n\u0e48cd"
     assert prev_cell_offset(text_leading_mark, len(text_leading_mark), 1) >= 3
+
+
+def test_right_margin_combining_marks_wrapped_and_continuation_rows() -> None:
+    """Upper/lower vowels and tone marks at the last column of a Window are
+    preserved on both the initial row and soft-wrapped continuation rows
+    with a line prefix (e.g. ``...``), without scanning off-screen lines."""
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.application.current import set_app
+    from prompt_toolkit.buffer import Buffer
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.controls import BufferControl
+    from prompt_toolkit.layout.mouse_handlers import MouseHandlers
+    from prompt_toolkit.layout.screen import Screen, WritePosition
+
+    # Width = 10:
+    # Row 0: cols 0..7 = "12345678", col 8 = "กี้", col 9 (last col) = "ที่"
+    # Row 1: cols 0..2 = "..." (prefix), cols 3..8 = "abcdef", col 9 (last col) = "กู้"
+    # Row 2: cols 0..2 = "..." (prefix), cols 3..5 = "xyz"
+    text = "12345678กี้ที่abcdefกู้xyz"
+    buf = Buffer(document=Document(text, cursor_position=11))
+    buf._load_history_task = True  # type: ignore[assignment]
+    ctrl = BufferControl(buffer=buf)
+    win = Window(
+        content=ctrl,
+        wrap_lines=True,
+        cursorline=True,
+        cursorcolumn=True,
+        get_line_prefix=lambda lineno, wrap_count: (
+            [("class:line-prefix", "...")] if wrap_count > 0 else []
+        ),
+    )
+    app: Application[object] = Application(layout=Layout(win))
+    screen = Screen()
+    with set_app(app):
+        win._write_to_screen_at_index(
+            screen, MouseHandlers(), WritePosition(0, 0, 10, 5), "", True
+        )
+
+    assert [screen.data_buffer[0][x].char for x in range(10)] == [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "กี้",
+        "ที่",
+    ]
+    assert [screen.data_buffer[1][x].char for x in range(10)] == [
+        ".",
+        ".",
+        ".",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "กู้",
+    ]
+    # Cursorline and cursorcolumn styles are preserved on the right-edge cluster.
+    assert "class:cursor-line" in screen.data_buffer[0][9].style
+    assert "class:cursor-column" in screen.data_buffer[0][9].style
+
+    # Reverse mouse-click lookup maps cell (0, 9) to the base character 'ท' (col 11).
+    assert win.render_info is not None
+    rowcol_to_yx = win.render_info._rowcol_to_yx
+    yx_to_rowcol = {v: k for k, v in rowcol_to_yx.items()}
+    assert yx_to_rowcol[0, 9] == (0, 11)
+    assert rowcol_to_yx[0, 11] == (0, 9)
+    assert rowcol_to_yx[0, 12] == (0, 9)
+    assert rowcol_to_yx[0, 13] == (0, 9)
+
+
+def test_right_margin_combining_marks_nowrap_and_visible_only_scan() -> None:
+    """Right-margin combining marks work with ``wrap_lines=False``
+    (``horizontal_scroll > 0``) and never call ``get_line`` on off-screen
+    buffer lines."""
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.application.current import set_app
+    from prompt_toolkit.buffer import Buffer
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.controls import BufferControl
+    from prompt_toolkit.layout.mouse_handlers import MouseHandlers
+    from prompt_toolkit.layout.screen import Screen, WritePosition
+
+    lines = ["0123456789abcที่def"] + [f"line {i} ที่" for i in range(1000)]
+    buf = Buffer(document=Document("\n".join(lines), cursor_position=13))
+    buf._load_history_task = True  # type: ignore[assignment]
+    ctrl = BufferControl(buffer=buf)
+    win = Window(content=ctrl, wrap_lines=False)
+    app: Application[object] = Application(layout=Layout(win))
+
+    accessed_lines: set[int] = set()
+    orig_create_content = ctrl.create_content
+
+    def counting_create_content(width: int, height: int, preview_search: bool = False):
+        content = orig_create_content(width, height, preview_search)
+        orig_get_line = content.get_line
+
+        def counting_get_line(i: int):
+            accessed_lines.add(i)
+            return orig_get_line(i)
+
+        content.get_line = counting_get_line  # type: ignore[method-assign]
+        return content
+
+    ctrl.create_content = counting_create_content  # type: ignore[method-assign]
+    screen = Screen()
+    with set_app(app):
+        win._write_to_screen_at_index(
+            screen, MouseHandlers(), WritePosition(0, 0, 10, 5), "", True
+        )
+
+    assert win.horizontal_scroll == 4
+    assert [screen.data_buffer[0][x].char for x in range(10)] == [
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "a",
+        "b",
+        "c",
+        "ที่",
+    ]
+    # Only visible rows (0..4) are queried, never the full 1001-line document.
+    assert len(accessed_lines) <= 6
+
+
+def test_output_screen_diff_last_column_autowrap_guard(sticky_gate) -> None:
+    """When a cell at the rightmost terminal column (`width - 1`) contains
+    combining marks (`len(cell.char) > 1`), `_output_screen_diff` wraps its
+    emission in `\\x1b[?7h` ... `\\x1b[?7l\\x1b[{width}G` so VT100 terminals
+    and multiplexers (`szn`) attach combining marks to `width - 1` instead
+    of `width - 2`."""
+    import io
+
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.data_structures import Point, Size
+    from prompt_toolkit.output.color_depth import ColorDepth
+    from prompt_toolkit.output.vt100 import Vt100_Output
+    from prompt_toolkit.renderer import (
+        _StyleStringHasStyleCache,
+        _StyleStringToAttrsCache,
+    )
+    from prompt_toolkit.styles import DummyStyleTransformation, default_ui_style
+
+    thai.note_document_text("ที่")
+    screen = Screen()
+    for x, ch in enumerate("123456789"):
+        screen.data_buffer[0][x] = Char(char=ch, style="")
+    screen.data_buffer[0][9] = Char(char="ที่", style="")
+    screen.height = 1
+
+    buf = io.StringIO()
+    size = Size(rows=4, columns=10)
+    vt_out = Vt100_Output(buf, lambda: size)
+    style = default_ui_style()
+    attrs_cache = _StyleStringToAttrsCache(
+        style.get_attrs_for_style_str, DummyStyleTransformation()
+    )
+    has_style_cache = _StyleStringHasStyleCache(attrs_cache)
+    app: Application[object] = Application()
+
+    ptk_renderer._output_screen_diff(
+        app,
+        vt_out,
+        screen,
+        Point(x=0, y=0),
+        ColorDepth.DEPTH_8_BIT,
+        None,
+        None,
+        False,
+        full_screen=True,
+        attrs_for_style_string=attrs_cache,
+        style_string_has_style=has_style_cache,
+        size=size,
+        previous_width=0,
+    )
+    vt_out.flush()
+    rendered = buf.getvalue()
+    assert "\x1b[?7hที่\x1b[?7l\x1b[10G" in rendered
+    assert 9 not in screen.zero_width_escapes[0]

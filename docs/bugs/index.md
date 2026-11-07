@@ -1,7 +1,7 @@
 ---
 type: index
 title: "pyvim Findings Bundle"
-description: "OKF v0.2 findings bundle for the pyvim bug audit: 61 machine-verified findings across Round 1 (hg rev 164, 2026-11-06, 001–037, closed) and Round 2 (hg rev 191, 2026-11-07, 038–061, fixed)."
+description: "OKF v0.2 findings bundle for the pyvim bug audit: 62 machine-verified findings across Round 1 (hg rev 164, 2026-11-06, 001–037, closed) and Round 2 (hg rev 191–233, 2026-11-07, 038–062, fixed)."
 status: stable
 sources:
   - docs/bugs/
@@ -11,8 +11,8 @@ stale_after: 2027-01-01T00:00:00Z
 tags: [bugs, findings, audit]
 generated:
   by: "Antigravity (Gemini 4 Argon)"
-  at: "2026-11-07T07:28:00Z"
-timestamp: "2026-11-07T07:28:00Z"
+  at: "2026-11-07T10:27:00Z"
+timestamp: "2026-11-07T10:27:00Z"
 ---
 
 # pyvim Findings Bundle
@@ -23,9 +23,9 @@ This bundle tracks machine-verified audit findings for `pyvim` (`pyvim/`,
 [`../speed_latency_plan.md`](../speed_latency_plan.md)):
 
 * **Round 1 (2026-11-06, hg rev 164 — [001](001.md)–[037](037.md), `fix_status: fixed`)**: 16 defects and 21 improvements verified against `prompt_toolkit 3.0.53`, live micro-probes, the test suite (68 passed), `mypy .` (40 files clean), and `tools/bench_plans.py`. Closed in hg rev 167–195 (100 tests, 43-file mypy baseline at the 3.10 floor, ruff clean).
-* **Round 2 (2026-11-07, hg rev 191 — [038](038.md)–[061](061.md), `fix_status: fixed`)**: 17 defects ([038](038.md)–[054](054.md)) and 7 improvements ([055](055.md)–[061](061.md)) uncovered during the follow-up full-project audit at hg rev 191 (`369831e8f7b8`). All fixed in hg rev 194–230.
+* **Round 2 (2026-11-07, hg rev 191–233 — [038](038.md)–[062](062.md), `fix_status: fixed`)**: 18 defects ([038](038.md)–[054](054.md), [062](062.md)) and 7 improvements ([055](055.md)–[061](061.md)). All fixed in hg rev 194–233.
 
-## Round 2 Findings (2026-11-07, hg rev 191 → fixed in rev 194–230)
+## Round 2 Findings (2026-11-07, hg rev 191 → fixed in rev 194–233)
 
 ### Defects (`type: bug`, `fix_status: fixed`)
 
@@ -48,6 +48,7 @@ This bundle tracks machine-verified audit findings for `pyvim` (`pyvim/`,
 | [052](052.md) | `BufferListOverlay` checks `location in c.display` (`FormattedText` list, always `False`) and triggers on `:buffers` | layout/completion | low |
 | [053](053.md) | `reverse_case_cell` (`~`) overrides `:set tildeop` unconditionally and ignores `event.arg` | key-bindings/vi-mode | low |
 | [054](054.md) | Miscellaneous logic defects (`is_thai_base` digits, `close_buffer` tab index, `hsplit`/`vsplit` assert, preview mismatches, `ignorecase`, file explorer, `tabstop`, `_try_char`) | thai/window-arrangement/commands/layout | low |
+| [062](062.md) | Thai/Lao upper/lower vowels and tone marks dropped or misplaced at the last column | thai/renderer/wrapping | **high** |
 
 ### Improvements & cleanup (`type: improvement`, `fix_status: fixed`)
 
