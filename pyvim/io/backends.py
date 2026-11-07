@@ -21,7 +21,7 @@ class FileIO(EditorIO):
     I/O backend for the native file system.
     """
 
-    def can_open_location(cls, location):
+    def can_open_location(self, location):
         # We can handle all local files.
         location = os.path.expanduser(location)
         return '://' not in location and not os.path.isdir(location)
@@ -57,7 +57,7 @@ class GZipFileIO(EditorIO):
     The read and write call will decompress and compress transparently.
     """
 
-    def can_open_location(cls, location):
+    def can_open_location(self, location):
         location = os.path.expanduser(location)
         return '://' not in location and not os.path.isdir(location) and location.endswith('.gz')
 
@@ -86,7 +86,7 @@ class DirectoryIO(EditorIO):
     Create a textual listing of the directory content.
     """
 
-    def can_open_location(cls, location):
+    def can_open_location(self, location):
         # We can handle all local directories.
         location = os.path.expanduser(location)
         return '://' not in location and os.path.isdir(location)
@@ -137,7 +137,7 @@ class HttpIO(EditorIO):
     I/O backend that reads from HTTP.
     """
 
-    def can_open_location(cls, location):
+    def can_open_location(self, location):
         # True when the location is an http:// or https:// URL.
         return location.startswith('http://') or location.startswith('https://')
 
@@ -146,10 +146,11 @@ class HttpIO(EditorIO):
 
     def read(self, location):
         # Do Http request.
-        bytes = urllib.request.urlopen(location).read()
+        with urllib.request.urlopen(location) as response:
+            data = response.read()
 
         # Return decoded.
-        return _auto_decode(bytes)
+        return _auto_decode(data)
 
     def write(self, location, text, encoding):
         raise NotImplementedError('Cannot write to HTTP.')

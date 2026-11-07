@@ -6,14 +6,13 @@ docs/bugs/029.md): tabstop and scrolloff keep their different minimums.
 from __future__ import annotations
 
 from pyvim.commands.handler import handle_command
+from pyvim.editor_buffer import EditorBuffer
 
 
 def _with_buffer(editor):
     """Give the editor an active buffer so `:set` commands can run."""
     editor.load_initial_files([None])
-    editor.window_arrangement._add_editor_buffer(
-        __import__('pyvim.editor_buffer', fromlist=['EditorBuffer']).EditorBuffer(editor)
-    )
+    editor.window_arrangement._add_editor_buffer(EditorBuffer(editor))
     editor.sync_with_prompt_toolkit()
     return editor
 

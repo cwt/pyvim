@@ -500,10 +500,8 @@ class SimpleArgToolbar(ConditionalContainer):
             else:
                 return []
 
-        (
-            super(SimpleArgToolbar, self).__init__(
-                Window(FormattedTextControl(get_tokens), align=WindowAlign.RIGHT), filter=has_arg
-            ),
+        super(SimpleArgToolbar, self).__init__(
+            Window(FormattedTextControl(get_tokens), align=WindowAlign.RIGHT), filter=has_arg
         )
 
 

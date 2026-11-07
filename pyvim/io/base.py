@@ -13,7 +13,7 @@ class EditorIO(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def can_open_location(cls, location):
+    def can_open_location(self, location):
         """
         Return True when this I/O implementation is able to handle this `location`.
         """

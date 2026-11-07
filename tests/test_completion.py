@@ -88,7 +88,8 @@ def test_document_completer_persists_words_completer(editor, editor_buffer):
 
 
 def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
-    pytest = __import__('pytest')
+    import pytest
+
     pytest.importorskip('jedi')
 
     p = tmp_path / 'mod.py'
@@ -106,7 +107,9 @@ def test_document_completer_python_uses_jedi(editor, editor_buffer, tmp_path):
         '.py files with Jedi enabled must not use the words completer'
     )
     # The jedi API introspection is computed once per session (docs/bugs/030.md):
-    assert __import__('pyvim.completion', fromlist=[''])._JEDI_TAKES_COLUMN is False
+    import pyvim.completion as _pc
+
+    assert _pc._JEDI_TAKES_COLUMN is False
 
 
 def test_document_completer_falls_back_without_jedi(editor, editor_buffer, monkeypatch):

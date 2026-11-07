@@ -590,7 +590,7 @@ def search_ignorecase(editor):
 
 @set_cmd('noignorecase')
 @set_cmd('noic')
-def searc_no_ignorecase(editor):
+def search_no_ignorecase(editor):
     """Disable case insensitive searching."""
     editor.ignore_case = False
 
@@ -655,7 +655,7 @@ def enable_breakindent(editor):
 @set_cmd('nobreakindent')
 @set_cmd('nobri')
 def disable_breakindent(editor):
-    "Enable the breakindent option."
+    "Disable the breakindent option."
     editor.break_indent = False
 
 

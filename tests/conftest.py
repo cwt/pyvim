@@ -7,8 +7,8 @@ from pyvim.window_arrangement import EditorBuffer, TabPage, Window
 
 
 @pytest.fixture
-def editor():
-    return Editor(output=DummyOutput(), input=DummyInput())
+def editor(tmp_path):
+    return Editor(config_directory=str(tmp_path), output=DummyOutput(), input=DummyInput())
 
 
 @pytest.fixture

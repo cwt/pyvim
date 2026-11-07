@@ -19,7 +19,7 @@ class HSplit(list):
 
 
 class VSplit(list):
-    """Horizontal split."""
+    """Vertical split."""
 
 
 class Window(object):
