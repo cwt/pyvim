@@ -196,7 +196,7 @@ def _bufferlist_overlay_visible(editor):
 
         text = editor.command_buffer.text.lstrip()
         return app.layout.has_focus(editor.command_buffer) and (
-            any(text.startswith(p) for p in ['b ', 'b! ', 'buffer', 'buffer!'])
+            any(text.startswith(p) for p in ['b ', 'b! ', 'buffer ', 'buffer! '])
         )
 
     return overlay_is_visible
@@ -213,6 +213,9 @@ class BufferListOverlay(ConditionalContainer):
             """
             Return a tokenlist with the `search_string` highlighted.
             """
+            if not search_string:
+                return [(default_token, location)]
+
             result = [(default_token, c) for c in location]
 
             # Replace token of matching positions.
@@ -251,7 +254,7 @@ class BufferListOverlay(ConditionalContainer):
                     b = editor.command_buffer
 
                     if b.complete_state and any(
-                        info.editor_buffer.location in c.display
+                        info.editor_buffer.location in c.display_text
                         for c in b.complete_state.completions
                         if info.editor_buffer.location is not None
                     ):
