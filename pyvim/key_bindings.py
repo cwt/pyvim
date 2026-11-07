@@ -49,11 +49,7 @@ def _delete_cell_clusters(event, backward):
     else:
         span = next_cell_offset(line, col, event.arg) - col
     if span > 0:
-        text = (
-            buff.delete_before_cursor(count=span)
-            if backward
-            else buff.delete(count=span)
-        )
+        text = buff.delete_before_cursor(count=span) if backward else buff.delete(count=span)
         event.app.clipboard.set_text(text)
 
 
@@ -223,7 +219,6 @@ def create_key_bindings(editor):
     # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
     # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
 
-
     @kb.add('x', filter=vi_navigation_mode)
     def delete_cell_after_cursor(event):
         """
@@ -268,7 +263,7 @@ def create_key_bindings(editor):
         buff.cursor_position += buff.document.get_cursor_left_position(count=1)
         event.app.vi_state.input_mode = InputMode.NAVIGATION
 
-    @kb.add('~', filter=vi_navigation_mode)
+    @kb.add('~', filter=vi_navigation_mode & ~Condition(lambda: get_app().vi_state.tilde_operator))
     def reverse_case_cell(event):
         """
         Swap case of the current cell cluster and advance one cell cluster.
@@ -279,7 +274,7 @@ def create_key_bindings(editor):
         col = doc.cursor_position_col
         if col >= len(line):
             return
-        end_col = next_cell_offset(line, col, 1)
+        end_col = next_cell_offset(line, col, event.arg)
         span = end_col - col
         if span > 0:
             cluster = line[col:end_col]
