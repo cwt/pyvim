@@ -145,3 +145,11 @@ def test_python_completer_missing_module_degrades_to_no_completions(
 
     doc = Document('import o', 8)
     list(completer.get_completions(doc, CompleteEvent()))  # must not raise
+
+
+def test_thai_words_not_split_at_combining_marks():
+    text = 'ที่ดิน น้ำ ผู้ใหญ่\nที่'
+    comps = _completions(DocumentWordsCompleter(), text, len('ที่ดิน น้ำ ผู้ใหญ่\nที่'))
+    assert 'ที่ดิน' in comps or 'ดิน' not in comps
+    # The corrupted single-base token 'ใหญ' (missing tone mark) must not appear.
+    assert 'ใหญ' not in comps

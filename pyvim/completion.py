@@ -45,7 +45,7 @@ class DocumentWordsCompleter(Completer):
     where the cache actually gets a chance to hit.
     """
 
-    _WORD_RE = re.compile(r'\w+')
+    _WORD_RE = re.compile(r'[\w\u0e31-\u0e3a\u0e47-\u0e4e\u0eb1-\u0ebc\u0ec7-\u0ece]+')
 
     def __init__(self):
         self._cached_key = None
