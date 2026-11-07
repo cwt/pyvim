@@ -11,6 +11,7 @@ def handle_command(editor, input_string):
     # Match with grammar and extract variables.
     m = COMMAND_GRAMMAR.match(input_string)
     if m is None:
+        editor.show_message('Unknown command: %s' % input_string)
         return
 
     variables = m.variables()

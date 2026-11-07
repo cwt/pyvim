@@ -26,7 +26,7 @@ COMMAND_GRAMMAR = compile(
                              (=(?P<set_value>[^\s]+))?           |
 
         # Colorscheme command
-        (?P<command>colorscheme) \s+ (?P<colorscheme>[^\s]+)    |
+        (?P<command>colorscheme|colo) \s+ (?P<colorscheme>[^\s]+)    |
 
         # Shell command
         !(?P<shell_command>.*)                                  |

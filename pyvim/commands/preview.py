@@ -92,7 +92,7 @@ class CommandPreviewer(object):
         set_option = variables.get('set_option')
 
         # Preview colorschemes.
-        if command == 'colorscheme':
+        if command in ('colorscheme', 'colo'):
             colorscheme = variables.get('colorscheme')
             if colorscheme:
                 e.use_colorscheme(colorscheme)
