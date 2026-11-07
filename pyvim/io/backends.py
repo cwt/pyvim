@@ -43,9 +43,6 @@ class FileIO(EditorIO):
             except UnicodeDecodeError:
                 pass  # Try next codec.
 
-        # Unable to open.
-        raise Exception('Unable to open file: %r' % location)
-
     def write(self, location, text, encoding):
         """
         Write file to disk.
@@ -172,5 +169,3 @@ def _auto_decode(data):
             return data.decode(e), e
         except UnicodeDecodeError:
             pass
-
-    return data.decode('utf-8', 'ignore')

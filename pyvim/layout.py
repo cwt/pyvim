@@ -67,9 +67,6 @@ def _try_char(character, backup, encoding=None):
         return character
 
 
-TABSTOP_DOT = _try_char('\u2508', '.')
-
-
 def get_welcome_message_tokens():
     "Static formatted text tokens shown in the welcome window."
     return WELCOME_MESSAGE_TOKENS

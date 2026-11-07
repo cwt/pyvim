@@ -245,7 +245,7 @@ def buffer_list(editor):
 
 @_cmd('b')
 @_cmd('buffer')
-def _buffer(editor, variables, force=False):
+def _buffer(editor, variables):
     """
     Go to one of the open buffers.
     """

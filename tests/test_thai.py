@@ -247,17 +247,6 @@ class _RecordingOutput(DummyOutput):
         self.written.append(data)
 
 
-def _gate_fixture(monkeypatch):
-    """Save/restore the sticky Thai-text renderer gate around a test."""
-    saved = thai._THAI_GATE.value
-    thai._THAI_GATE.value = False
-    try:
-        yield thai._THAI_GATE
-    finally:
-        thai._THAI_GATE.reset()
-        thai._THAI_GATE.value = saved
-
-
 @pytest.fixture
 def sticky_gate(monkeypatch):
     """Force the sticky Thai-text renderer gate off for a deterministic test."""

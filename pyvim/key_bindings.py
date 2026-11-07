@@ -22,13 +22,6 @@ from .thai import next_cell_offset, prev_cell_offset
 __all__ = ('create_key_bindings',)
 
 
-def _current_window_for_event(event):
-    """
-    Return the `Window` for the currently focussed Buffer.
-    """
-    return event.app.layout.current_window
-
-
 def _keep_keysync_disabled(event):
     """
     Never record the partially-typed key buffer with the redo binding
