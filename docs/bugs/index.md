@@ -1,7 +1,7 @@
 ---
 type: index
 title: "pyvim Findings Bundle"
-description: "OKF v0.2 findings bundle for the pyvim bug audit: 61 machine-verified findings across Round 1 (hg rev 164, 2026-11-06, 001–037, closed) and Round 2 (hg rev 191, 2026-11-07, 038–061, open)."
+description: "OKF v0.2 findings bundle for the pyvim bug audit: 61 machine-verified findings across Round 1 (hg rev 164, 2026-11-06, 001–037, closed) and Round 2 (hg rev 191, 2026-11-07, 038–061, fixed)."
 status: stable
 sources:
   - docs/bugs/
@@ -23,11 +23,11 @@ This bundle tracks machine-verified audit findings for `pyvim` (`pyvim/`,
 [`../speed_latency_plan.md`](../speed_latency_plan.md)):
 
 * **Round 1 (2026-11-06, hg rev 164 — [001](001.md)–[037](037.md), `fix_status: fixed`)**: 16 defects and 21 improvements verified against `prompt_toolkit 3.0.53`, live micro-probes, the test suite (68 passed), `mypy .` (40 files clean), and `tools/bench_plans.py`. Closed in hg rev 167–195 (100 tests, 43-file mypy baseline at the 3.10 floor, ruff clean).
-* **Round 2 (2026-11-07, hg rev 191 — [038](038.md)–[061](061.md), `fix_status: open`)**: 17 defects ([038](038.md)–[054](054.md)) and 7 improvements ([055](055.md)–[061](061.md)) uncovered during the follow-up full-project audit at hg rev 191 (`369831e8f7b8`). Report-only — no source code modified yet.
+* **Round 2 (2026-11-07, hg rev 191 — [038](038.md)–[061](061.md), `fix_status: fixed`)**: 17 defects ([038](038.md)–[054](054.md)) and 7 improvements ([055](055.md)–[061](061.md)) uncovered during the follow-up full-project audit at hg rev 191 (`369831e8f7b8`). All fixed in hg rev 194–230.
 
-## Round 2 Open Findings (2026-11-07, hg rev 191)
+## Round 2 Findings (2026-11-07, hg rev 191 → fixed in rev 194–230)
 
-### Defects (`type: bug`, `fix_status: open`)
+### Defects (`type: bug`, `fix_status: fixed`)
 
 | ID | Finding | Area | Priority |
 | :--- | :--- | :--- | :--- |
@@ -49,7 +49,7 @@ This bundle tracks machine-verified audit findings for `pyvim` (`pyvim/`,
 | [053](053.md) | `reverse_case_cell` (`~`) overrides `:set tildeop` unconditionally and ignores `event.arg` | key-bindings/vi-mode | low |
 | [054](054.md) | Miscellaneous logic defects (`is_thai_base` digits, `close_buffer` tab index, `hsplit`/`vsplit` assert, preview mismatches, `ignorecase`, file explorer, `tabstop`, `_try_char`) | thai/window-arrangement/commands/layout | low |
 
-### Improvements & cleanup (`type: improvement`, `fix_status: open`)
+### Improvements & cleanup (`type: improvement`, `fix_status: fixed`)
 
 | ID | Finding | Category | Priority |
 | :-- | :--- | :--- | :--- |
