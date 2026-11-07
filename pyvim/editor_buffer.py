@@ -151,31 +151,38 @@ class EditorBuffer(object):
         Returns ``True`` when the file was written, ``False`` otherwise
         (a message has been shown).
         """
-        # Take location and expand tilde.
-        if location is not None:
-            self.location = location
-        assert self.location
+        # Resolve the target location without mutating state up front.
+        target_location = location if location is not None else self.location
+        if not target_location:
+            self.editor.show_message('Unknown location: %r' % location)
+            return False
 
         # Find I/O backend that handles this location.
         for io in self.editor.io_backends:
-            if io.can_open_location(self.location):
+            if io.can_open_location(target_location):
                 break
         else:
-            self.editor.show_message('Unknown location: %r' % location)
+            self.editor.show_message('Unknown location: %r' % target_location)
             return False
 
         # Write it.
         try:
-            io.write(self.location, self.buffer.text + '\n', self.encoding)
+            io.write(target_location, self.buffer.text + '\n', self.encoding)
             self.is_new = False
         except Exception as e:
             # E.g. "No such file or directory."
             self.editor.show_message('%s' % e)
             return False
         else:
+            location_changed = target_location != self.location
+            # Only mutate location after a successful write.
+            self.location = target_location
             # When the save succeeds: update: _file_content.
             self._file_content = self.buffer.text
             self._has_unsaved_changes = False
+            if location_changed:
+                self.run_reporter()
+                note_document_text(self.location)
             return True
 
     def get_display_name(self, short=False):

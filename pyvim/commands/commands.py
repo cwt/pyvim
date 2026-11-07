@@ -330,7 +330,7 @@ def write(editor, location, force=False):
     """
     Write file. Returns whether the buffer was written.
     """
-    if location and not force and os.path.exists(location):
+    if location and not force and os.path.exists(os.path.expanduser(location)):
         editor.show_message('File exists (add ! to override)')
         return False
     eb = editor.window_arrangement.active_editor_buffer

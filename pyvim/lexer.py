@@ -52,6 +52,14 @@ class DocumentLexer(Lexer):
         self._syntax_sync = None
         self._directory_lexer = None
 
+    def invalidation_hash(self):
+        # Invalidate the fragment cache when the buffer location (or file
+        # explorer mode) changes, e.g. after `:w newname.py`.
+        return (
+            self.editor_buffer.location,
+            getattr(self.editor_buffer, 'in_file_explorer_mode', False),
+        )
+
     def _get_directory_lexer(self):
         """
         Cached `PygmentsLexer` for directory listing buffers.

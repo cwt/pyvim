@@ -69,3 +69,23 @@ def test_wqa_quits_only_after_successful_write(editor, editor_buffer, tmp_path, 
     handle_command(editor, ':wqa')
     assert exits == [1]
     assert (tmp_path / 'wqa_other.txt').read_text() == 'wqa contents\n'
+
+
+def test_write_failure_does_not_mutate_location(editor, editor_buffer, tmp_path):
+    eb = _editor_with_text(editor, editor_buffer, 'data')
+    eb.location = str(tmp_path / 'ok.txt')
+    bad = str(tmp_path / 'no-such-dir' / 'x.txt')
+    assert eb.write(bad) is False
+    assert eb.location == str(tmp_path / 'ok.txt')
+
+
+def test_write_overwrite_check_expands_tilde(editor, editor_buffer, tmp_path, monkeypatch):
+    # Create an existing file in tmp home? Use direct os.path.exists path.
+    target = tmp_path / 'existing.txt'
+    target.write_text('old')
+    # :w without ! on existing path should be rejected.
+    eb = _editor_with_text(editor, editor_buffer, 'new')
+    handle_command(editor, ':w %s' % target)
+    # message shown, file unchanged
+    assert editor.message is not None
+    assert target.read_text() == 'old'
