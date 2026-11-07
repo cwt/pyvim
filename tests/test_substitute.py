@@ -159,3 +159,35 @@ def test_substitute_flags_g(editor, editor_buffer):
     given_sample_text(editor_buffer, 'Violet is Violet\n')
     handle_command(editor, ':s/Violet/Rose/g')
     assert 'Rose is Rose' in editor_buffer.buffer.text
+
+
+def test_substitute_invalid_regex_does_not_crash(editor, editor_buffer):
+    given_sample_text(editor_buffer, 'hello\n')
+    handle_command(editor, ':s/[unclosed/x')
+    assert editor.message is not None
+    assert editor_buffer.buffer.text == 'hello\n'
+
+
+def test_substitute_invalid_replacement_does_not_crash(editor, editor_buffer):
+    given_sample_text(editor_buffer, 'hello\n')
+    handle_command(editor, ':s/hello/\\1')
+    assert editor.message is not None
+
+
+def test_substitute_empty_search_history_does_not_mutate(editor, editor_buffer):
+    given_sample_text(editor_buffer, 'hello\n')
+    editor.application.current_search_state.text = ''
+    before = editor_buffer.buffer.text
+    handle_command(editor, ':s//X')
+    assert editor_buffer.buffer.text == before
+    assert editor.message is not None
+
+
+def test_substitute_zero_matches_does_not_mark_dirty(editor, editor_buffer):
+    given_sample_text(editor_buffer, 'hello\n')
+    editor_buffer.buffer.text = 'hello'
+    editor_buffer._file_content = editor_buffer.buffer.text
+    editor_buffer._has_unsaved_changes = False
+    assert not editor_buffer.has_unsaved_changes
+    handle_command(editor, ':s/notfound/x/g')
+    assert not editor_buffer.has_unsaved_changes

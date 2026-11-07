@@ -730,25 +730,28 @@ def set_colorcolumn(editor, value):
 def substitute(editor, range_start, range_end, search, replace, flags):
     """Substitute /search/ with /replace/ over a range of text"""
 
-    def substitute_in_line(line):
-        SUBSTITUTE_ALL, SUBSTITUTE_ONE = 0, 1
-        sub_count = SUBSTITUTE_ALL if 'g' in flags else SUBSTITUTE_ONE
-        return re.sub(search, replace, line, count=sub_count)
-
     search_state = editor.application.current_search_state
     buffer = editor.current_editor_buffer.buffer
     cursor_position_row = buffer.document.cursor_position_row
 
-    # read editor state
+    # Resolve search pattern from history when omitted.
     if not search:
         search = search_state.text
+    if not search:
+        editor.show_message('No previous regular expression')
+        return
 
     if replace is None:
         replace = editor.last_substitute_text
 
-    # Convert and validate the captured range (docs/bugs/004.md): an
-    # out-of-document range must produce an error message, not an IndexError
-    # crash. vim reports this as `E19: No such line in current buffer`.
+    # Compile the regex once; reject malformed patterns up front.
+    try:
+        pattern = re.compile(search)
+    except re.error as e:
+        editor.show_message('Invalid regex: %s' % e)
+        return
+
+    # Convert and validate the captured range.
     if not range_start:
         assert not range_end
         range_start_row = range_end_row = cursor_position_row
@@ -760,36 +763,46 @@ def substitute(editor, range_start, range_end, search, replace, flags):
         return
     line_numbers = list(range(range_start_row, range_end_row + 1))
 
-    # Track the last line that actually changed (docs/bugs/015.md): vim
-    # places the cursor on the last *substituted* line, not the last range
-    # line when some lines in the range had no match.
+    sub_count = 0 if 'g' in flags else 1
+
+    # Transform each line once, tracking the last substituted row and
+    # rejecting invalid replacement escapes without mutating the buffer.
     buffer_lines = buffer.document.lines
+    substituted = {}
     last_substituted_row = None
+    regex_error = None
     for row in line_numbers:
-        if substitute_in_line(buffer_lines[row]) != buffer_lines[row]:
+        original = buffer_lines[row]
+        try:
+            result = pattern.sub(replace, original, count=sub_count)
+        except re.error as e:
+            regex_error = e
+            break
+        substituted[row] = result
+        if result != original:
             last_substituted_row = row
 
-    # `transform_lines` always rebuilds the document (and moves the cursor),
-    # also when every line is unchanged; remember the position for the
-    # no-match case below.
-    original_cursor_position = buffer.cursor_position
-    new_text = buffer.transform_lines(line_numbers, substitute_in_line)
+    if regex_error is not None:
+        editor.show_message('Invalid regex: %s' % regex_error)
+        return
 
-    # update text buffer
-    # Construct the `Document` only once: the cursor position (start of the
-    # line + leading whitespace, mirroring `get_start_of_line_position(
-    # after_whitespace=True)`) is computed on that same instance instead of
-    # constructing a second `Document` just to translate row/col to an index.
+    if last_substituted_row is None:
+        editor.show_message('Pattern not found')
+        return
+
+    # Apply substitution.
+    buffer.save_to_undo_stack()
+    lines = list(buffer.document.lines)
+    for row in line_numbers:
+        lines[row] = substituted[row]
+    new_text = "\n".join(lines)
+
     doc = Document(new_text)
     buffer.document = doc
-    if last_substituted_row is None:
-        # No line in the range matched anything: keep the cursor where it was.
-        buffer.cursor_position = min(original_cursor_position, len(new_text))
-    else:
-        row = last_substituted_row
-        buffer.cursor_position = doc.translate_row_col_to_index(row, 0) + (
-            len(doc.lines[row]) - len(doc.lines[row].lstrip())
-        )
+    row = last_substituted_row
+    buffer.cursor_position = doc.translate_row_col_to_index(row, 0) + (
+        len(doc.lines[row]) - len(doc.lines[row].lstrip())
+    )
     buffer._search(search_state, include_current_position=True)
 
     # update editor state
