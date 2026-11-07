@@ -887,6 +887,7 @@ def _make_kp_start_timeout_wrapper(
 # ---------------------------------------------------------------------------
 
 _SARA_AM_POISON = Char(char="\x00", style="__pyvim_sara_am_invalidate__")
+_SARA_AM_DEFAULT_CHAR = Char()
 
 # C-speed detection for strings that may land on screen; ASCII strings are
 # free (`str.isascii()`), so the gate never needs to scan a screen grid to
@@ -968,12 +969,15 @@ def _sanitize_and_invalidate_sara_am(
         row_indices.update(previous_screen.data_buffer.keys())
 
     for y in row_indices:
-        new_row = new_screen.data_buffer[y]
+        new_row = new_screen.data_buffer.get(y)
+        if new_row is None:
+            # Row only exists in previous_screen; nothing to sanitize here.
+            continue
 
         # 1. Clear stray width-0 combining cells not overwritten by a trailing
         #    character. (Only values are replaced, so mutating while
         #    iterating `items()` is safe and avoids copying the row.)
-        for x, cell in new_row.items():
+        for x, cell in list(new_row.items()):
             if cell.width == 0 and cell.char != "":
                 new_row[x] = Char(char=" ", style=cell.style)
 
@@ -981,21 +985,18 @@ def _sanitize_and_invalidate_sara_am(
         if previous_screen is None or y not in previous_screen.data_buffer:
             continue
         prev_row = previous_screen.data_buffer[y]
-        row_max_x = (
-            max(
-                max(new_row.keys(), default=0),
-                max(prev_row.keys(), default=0),
-            )
-            + 1
-        )
-        max_x = min(width, row_max_x)
-
-        for x in range(1, max_x):
-            prev_cell = prev_row[x]
-            cur_cell = new_row[x]
+        all_xs = set(new_row.keys()) | set(prev_row.keys())
+        for x in sorted(x for x in all_xs if x >= 1):
+            if x not in prev_row or x not in new_row:
+                # Use defaults without inflating defaultdicts.
+                prev_cell = prev_row.get(x, _SARA_AM_DEFAULT_CHAR)
+                cur_cell = new_row.get(x, _SARA_AM_DEFAULT_CHAR)
+            else:
+                prev_cell = prev_row[x]
+                cur_cell = new_row[x]
             if _cell_has_sara_am(prev_cell) or _cell_has_sara_am(cur_cell):
-                prev_left = prev_row[x - 1]
-                cur_left = new_row[x - 1]
+                prev_left = prev_row.get(x - 1, _SARA_AM_DEFAULT_CHAR)
+                cur_left = new_row.get(x - 1, _SARA_AM_DEFAULT_CHAR)
                 left_changed = (cur_left.char != prev_left.char) or (
                     cur_left.style != prev_left.style
                 )
@@ -1061,6 +1062,7 @@ _ORIGINAL_DOCUMENT_METHODS: dict[str, Callable[..., Any]] = {}
 # Originals for the KeyProcessor patches (mirrors `_ORIGINAL_DOCUMENT_METHODS`).
 _ORIGINAL_KEY_PROCESSOR_METHODS: dict[str, Callable[..., Any]] = {}
 
+
 def _thai_selection_ranges(self) -> Iterable[tuple[int, int]]:
     """Thai-aware wrapper for `Document.selection_ranges`."""
     orig = _ORIGINAL_DOCUMENT_METHODS.get("selection_ranges")
@@ -1099,7 +1101,6 @@ def _thai_selection_range_at_line(self, row: int) -> tuple[int, int] | None:
             if new_end > end:
                 end = new_end
     return start, end
-
 
 
 _DOCUMENT_PATCH_SPECS: tuple[tuple[str, tuple[str, ...], Callable[..., object]], ...] = (
@@ -1199,6 +1200,7 @@ def install_prompt_toolkit_thai_patches() -> bool:
             if _orig_operator_range is not None and not getattr(
                 _orig_operator_range, "_pyvim_thai_patched", False
             ):
+
                 def _thai_operator_range(self, document):
                     start, end = _orig_operator_range(self, document)
                     doc = document

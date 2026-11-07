@@ -127,7 +127,8 @@ class DocumentLexer(Lexer):
 
             def create_line_generator(start_lineno, column=0):
                 def get_text_fragments():
-                    text = '\n'.join(document.lines[start_lineno:])[column:]
+                    start_index = document.translate_row_col_to_index(start_lineno, column)
+                    text = document.text[start_index:]
                     for _, t, v in pygments_lexer.get_tokens_unprocessed(text):
                         yield _style_classname(t), v
 

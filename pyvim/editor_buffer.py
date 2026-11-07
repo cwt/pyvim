@@ -80,7 +80,7 @@ class EditorBuffer(object):
 
         # Keep the sticky Thai-text renderer gate up to date (O(1) for ASCII
         # content; one C-regex scan per edit while unlatched and non-ASCII).
-        note_document_text(self.buffer.text)
+        note_document_text(self.buffer.document.current_line)
 
         self.run_reporter()
 
