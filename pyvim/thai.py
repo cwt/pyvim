@@ -34,6 +34,13 @@ from typing import Any, Callable, Iterable, Pattern
 import prompt_toolkit.renderer as ptk_renderer
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters.app import vi_mode, vi_navigation_mode, vi_selection_mode
+
+try:
+    from prompt_toolkit.key_binding.bindings.vi import TextObject as _PtkTextObject
+    from prompt_toolkit.key_binding.bindings.vi import TextObjectType as _PtkTextObjectType
+except Exception:  # pragma: no cover
+    _PtkTextObject = None  # type: ignore[assignment,misc]
+    _PtkTextObjectType = None  # type: ignore[assignment,misc]
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent, KeyProcessor
 from prompt_toolkit.layout.screen import Char, Screen
 from prompt_toolkit.utils import get_cwidth
@@ -1185,6 +1192,42 @@ def install_prompt_toolkit_thai_patches() -> bool:
             setattr(wrapped_timeout, "_pyvim_thai_patched", True)
             setattr(KeyProcessor, "_start_timeout", wrapped_timeout)
             applied.append((KeyProcessor, "_start_timeout", kp_timeout))
+
+        # Patch TextObject.operator_range for Thai/Lao cell clusters.
+        if _PtkTextObject is not None:
+            _orig_operator_range = getattr(_PtkTextObject, "operator_range", None)
+            if _orig_operator_range is not None and not getattr(
+                _orig_operator_range, "_pyvim_thai_patched", False
+            ):
+                def _thai_operator_range(self, document):
+                    start, end = _orig_operator_range(self, document)
+                    doc = document
+                    # Snap the lower bound off a combining mark onto its cell start.
+                    abs_start = doc.cursor_position + start
+                    if 0 <= abs_start < len(doc.text):
+                        row, col = doc.translate_index_to_position(abs_start)
+                        if row < len(doc.lines):
+                            line = doc.lines[row]
+                            if col < len(line) and is_combining_char(line[col]):
+                                new_col = prev_cell_offset(line, col, 1)
+                                new_abs = doc.translate_row_col_to_index(row, new_col)
+                                start += new_abs - abs_start
+                    # For inclusive motions, extend the upper bound to the end of
+                    # the cell cluster instead of a single codepoint.
+                    if _PtkTextObjectType is not None and self.type == _PtkTextObjectType.INCLUSIVE:
+                        abs_end_char = doc.cursor_position + end - 1
+                        if 0 <= abs_end_char < len(doc.text):
+                            row, col = doc.translate_index_to_position(abs_end_char)
+                            if row < len(doc.lines):
+                                line = doc.lines[row]
+                                if col < len(line):
+                                    cluster_size = next_cell_offset(line, col, 1) - col
+                                    if cluster_size > 1:
+                                        end += cluster_size - 1
+                    return start, end
+
+                setattr(_thai_operator_range, "_pyvim_thai_patched", True)
+                _PtkTextObject.operator_range = _thai_operator_range  # type: ignore[method-assign]
 
         # Startup self-test required by Section 4.1:
         test_doc = Document("ที่ดิน", cursor_position=0)
