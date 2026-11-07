@@ -345,6 +345,8 @@ class ReportMessageToolbar(ConditionalContainer):
     def __init__(self, editor):
         def get_formatted_text():
             eb = editor.window_arrangement.active_editor_buffer
+            if eb is None:
+                return []
 
             lineno = eb.buffer.document.cursor_position_row
             errors = eb.report_errors_by_line.get(lineno)

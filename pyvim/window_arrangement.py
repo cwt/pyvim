@@ -149,7 +149,7 @@ class TabPage(object):
         """
         Close all the windows that have this editor buffer open.
         """
-        for split, window in self._walk_through_windows():
+        for split, window in list(self._walk_through_windows()):
             if window.editor_buffer == editor_buffer:
                 self._close_window(window)
 
@@ -161,8 +161,10 @@ class TabPage(object):
             self.close_active_window()
         else:
             original_active_window = self.active_window
+            self.active_window = window
             self.close_active_window()
-            self.active_window = original_active_window
+            if original_active_window in self.windows():
+                self.active_window = original_active_window
 
     def close_active_window(self):
         """
@@ -256,6 +258,14 @@ class WindowArrangement(object):
         """
         Close active window of active tab.
         """
+        if self.active_tab.window_count() == 1:
+            if len(self.tab_pages) > 1:
+                self.close_tab()
+                return
+            else:
+                self.editor.show_message('E444: Cannot close last window')
+                return
+
         self.active_tab.close_active_window()
 
         # Clean up buffers.
