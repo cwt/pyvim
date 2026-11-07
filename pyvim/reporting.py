@@ -40,6 +40,21 @@ class ReporterError(object):
         self.end_column = end_column
         self.formatted_text = formatted_text
 
+    def __eq__(self, other):
+        if not isinstance(other, ReporterError):
+            return NotImplemented
+        return (
+            self.lineno,
+            self.start_column,
+            self.end_column,
+            self.formatted_text,
+        ) == (
+            other.lineno,
+            other.start_column,
+            other.end_column,
+            other.formatted_text,
+        )
+
 
 def report(location, document):
     """
@@ -76,15 +91,29 @@ def report_pyflakes(document):
 
     def message_to_reporter_error(message):
         """Turn pyflakes message into ReporterError."""
-        start_index = document.translate_row_col_to_index(message.lineno - 1, message.col)
+        row = message.lineno - 1
+        if row < len(document.lines):
+            line = document.lines[row]
+        else:
+            line = ''
+        # `message.col` is a UTF-8 byte offset (Python 3.8+ ast col_offset);
+        # convert it to a character column.
+        char_col = len(line.encode('utf-8')[: message.col].decode('utf-8', errors='replace'))
+        start_index = document.translate_row_col_to_index(row, char_col)
+        line_start = document.translate_row_col_to_index(row, 0)
+        line_end = line_start + len(line)
         end_index = start_index
-        while end_index < len(document.text) and document.text[end_index] in WORD_CHARACTERS:
-            end_index += 1
+        while end_index < line_end:
+            ch = document.text[end_index]
+            if ch == '_' or ch.isalnum():
+                end_index += 1
+            else:
+                break
 
         return ReporterError(
-            lineno=message.lineno - 1,
-            start_column=message.col,
-            end_column=message.col + end_index - start_index,
+            lineno=row,
+            start_column=char_col,
+            end_column=char_col + (end_index - start_index),
             formatted_text=format_flake_message(message),
         )
 
