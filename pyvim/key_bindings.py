@@ -36,6 +36,27 @@ def _keep_keysync_disabled(event):
     return False
 
 
+def _delete_cell_clusters(event, backward):
+    """
+    Delete `event.arg` cell clusters before/after the cursor on the current line.
+    """
+    buff = event.current_buffer
+    doc = buff.document
+    line = doc.current_line
+    col = doc.cursor_position_col
+    if backward:
+        span = col - prev_cell_offset(line, col, event.arg)
+    else:
+        span = next_cell_offset(line, col, event.arg) - col
+    if span > 0:
+        text = (
+            buff.delete_before_cursor(count=span)
+            if backward
+            else buff.delete(count=span)
+        )
+        event.app.clipboard.set_text(text)
+
+
 def create_key_bindings(editor):
     """
     Create custom key bindings.
@@ -72,7 +93,7 @@ def create_key_bindings(editor):
         """
         Indent current line.
         """
-        b = event.application.current_buffer
+        b = event.current_buffer
 
         # Move to start of line.
         pos = b.document.get_start_of_line_position(after_whitespace=True)
@@ -202,21 +223,6 @@ def create_key_bindings(editor):
     # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
     # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
 
-    def _delete_cell_clusters(event, backward):
-        "Delete `event.arg` cell clusters before/after the cursor on the current line."
-        buff = event.current_buffer
-        doc = buff.document
-        line = doc.current_line
-        col = doc.cursor_position_col
-        if backward:
-            span = col - prev_cell_offset(line, col, event.arg)
-            if span > 0:
-                text = buff.delete_before_cursor(count=span)
-        else:
-            span = next_cell_offset(line, col, event.arg) - col
-            if span > 0:
-                text = buff.delete(count=span)
-        event.app.clipboard.set_text(text)
 
     @kb.add('x', filter=vi_navigation_mode)
     def delete_cell_after_cursor(event):
