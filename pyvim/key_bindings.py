@@ -211,10 +211,6 @@ def create_key_bindings(editor):
     # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
     # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
 
-    # Cell-cluster Vi editing and motion overrides (Phase 3):
-    # Ensure `x`, `X`, `s`, `r`, `~`, `$`, `e`, and `E` operate on whole
-    # visual cell clusters (`base + comb*`) rather than slicing raw codepoints.
-
     @kb.add('x', filter=vi_navigation_mode)
     def delete_cell_after_cursor(event):
         """

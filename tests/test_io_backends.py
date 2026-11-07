@@ -65,10 +65,10 @@ def test_fileio_uses_io_open(tmp_path, monkeypatch):
     monkeypatch.setattr('pyvim.io.backends.io.open', tracking_open)
 
     f.write(p, 'data', 'utf-8')
-    f.read(p)
+    assert f.read(p) == ('data', 'utf-8')
 
-    assert [args[1] for args, _kw in calls] == ['w', 'r']
-    assert [kw.get('encoding') for _args, kw in calls] == ['utf-8', 'utf-8']
+    assert [args[1] for args, _kw in calls] == ['w']
+    assert [kw.get('encoding') for _args, kw in calls] == ['utf-8']
 
 
 def test_gzip_roundtrip(tmp_path):

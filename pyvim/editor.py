@@ -218,6 +218,11 @@ class Editor(object):
         """
         current_buffer = self.application.current_buffer
 
+        # Fast path: the active editor buffer.
+        active = self.window_arrangement.active_editor_buffer
+        if active is not None and active.buffer == current_buffer:
+            return active
+
         # Find/return the EditorBuffer with this name.
         for b in self.window_arrangement.editor_buffers:
             if b.buffer == current_buffer:

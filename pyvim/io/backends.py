@@ -35,13 +35,9 @@ class FileIO(EditorIO):
         """
         location = os.path.expanduser(location)
 
-        # Try to open this file, using different encodings.
-        for e in ENCODINGS:
-            try:
-                with io.open(location, 'r', encoding=e) as f:
-                    return f.read(), e
-            except UnicodeDecodeError:
-                pass  # Try next codec.
+        with open(location, 'rb') as f:
+            data = f.read()
+        return _auto_decode(data)
 
     def write(self, location, text, encoding):
         """
@@ -62,10 +58,11 @@ class GZipFileIO(EditorIO):
     """
 
     def can_open_location(cls, location):
-        return FileIO().can_open_location(location) and location.endswith('.gz')
+        location = os.path.expanduser(location)
+        return '://' not in location and not os.path.isdir(location) and location.endswith('.gz')
 
     def exists(self, location):
-        return FileIO().exists(location)
+        return os.path.exists(os.path.expanduser(location))
 
     def read(self, location):
         location = os.path.expanduser(location)
