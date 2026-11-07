@@ -84,7 +84,7 @@ def test_write_overwrite_check_expands_tilde(editor, editor_buffer, tmp_path, mo
     target = tmp_path / 'existing.txt'
     target.write_text('old')
     # :w without ! on existing path should be rejected.
-    eb = _editor_with_text(editor, editor_buffer, 'new')
+    _editor_with_text(editor, editor_buffer, 'new')
     handle_command(editor, ':w %s' % target)
     # message shown, file unchanged
     assert editor.message is not None

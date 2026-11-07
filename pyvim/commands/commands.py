@@ -745,8 +745,9 @@ def substitute(editor, range_start, range_end, search, replace, flags):
         replace = editor.last_substitute_text
 
     # Compile the regex once; reject malformed patterns up front.
+    regex_flags = re.IGNORECASE if getattr(editor, 'ignore_case', False) else 0
     try:
-        pattern = re.compile(search)
+        pattern = re.compile(search, flags=regex_flags)
     except re.error as e:
         editor.show_message('Invalid regex: %s' % e)
         return

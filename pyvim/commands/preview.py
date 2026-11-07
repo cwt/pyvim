@@ -34,6 +34,7 @@ class CommandPreviewer(object):
 
     def __init__(self, editor):
         self.editor = editor
+        self.save()
 
     def save(self):
         """
@@ -117,11 +118,17 @@ class CommandPreviewer(object):
     @staticmethod
     def _preview_int_value(e, attribute, variables):
         raw_value = variables.get('set_value')
-        if raw_value and raw_value.isdigit() and int(raw_value) > 0:
+        minimum = 0 if attribute == 'scroll_offset' else 1
+        if raw_value and raw_value.isdigit() and int(raw_value) >= minimum:
             setattr(e, attribute, int(raw_value))
 
     @staticmethod
     def _preview_colorcolumn(e, variables):
         value = variables.get('set_value', '')
-        if value:
-            e.colorcolumn = [int(v) for v in value.split(',') if v.isdigit()]
+        if not value:
+            e.colorcolumn = []
+            return
+        try:
+            e.colorcolumn = [int(v) for v in value.split(',')]
+        except ValueError:
+            return

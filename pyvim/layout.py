@@ -54,11 +54,13 @@ from .welcome_message import WELCOME_MESSAGE_HEIGHT, WELCOME_MESSAGE_TOKENS, WEL
 __all__ = ('EditorLayout',)
 
 
-def _try_char(character, backup, encoding=sys.stdout.encoding):
+def _try_char(character, backup, encoding=None):
     """
     Return `character` if it can be encoded using sys.stdout, else return the
     backup character.
     """
+    if encoding is None:
+        encoding = getattr(sys.stdout, 'encoding', None) or 'utf-8'
     if character.encode(encoding, 'replace') == b'?':
         return backup
     else:
@@ -567,7 +569,11 @@ class EditorLayout(object):
             ],
         )
 
-        search_toolbar = SearchToolbar(vi_mode=True, search_buffer=editor.search_buffer)
+        search_toolbar = SearchToolbar(
+            vi_mode=True,
+            search_buffer=editor.search_buffer,
+            ignore_case=Condition(lambda: editor.ignore_case),
+        )
         self.search_control = search_toolbar.control
 
         self.layout = Layout(

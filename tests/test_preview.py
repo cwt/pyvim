@@ -83,7 +83,10 @@ def test_int_value_options_preview(editor):
     assert editor.tabstop == 4
 
     # colorcolumn keeps its own value parsing semantics:
+    # Invalid tokens are rejected, matching `:set cc` on <Enter>:
     previewer.preview(':set colorcolumn=80,40,xx')
+    assert editor.colorcolumn == []
+    previewer.preview(':set colorcolumn=80,40')
     assert editor.colorcolumn == [80, 40]
     assert editor.scroll_offset == 0
 

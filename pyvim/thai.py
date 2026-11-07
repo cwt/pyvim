@@ -204,6 +204,10 @@ def is_thai_right_attaching(cp: int) -> bool:
     return cp in _RIGHT_ATTACHING_CPS
 
 
+_THAI_DIGIT_CPS = set(range(0x0E50, 0x0E5A)) | set(range(0x0ED0, 0x0EDA))
+_THAI_SYMBOL_CPS = {0x0E3F, 0x0E4F, 0x0E5A, 0x0E5B}
+
+
 def is_thai_base(cp: int) -> bool:
     """
     Port of `szn/src/thai.zig:126-133` (`isThaiBase`):
@@ -216,6 +220,8 @@ def is_thai_base(cp: int) -> bool:
         and not is_thai_leading_vowel(cp)
         and not is_thai_following_vowel(cp)
         and not is_thai_right_attaching(cp)
+        and cp not in _THAI_DIGIT_CPS
+        and cp not in _THAI_SYMBOL_CPS
         and get_cwidth(chr(cp)) == 1
     )
 

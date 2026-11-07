@@ -284,7 +284,9 @@ class WindowArrangement(object):
 
     def hsplit(self, location=None, new=False, text=None):
         """Split horizontally."""
-        assert location is None or text is None or new is False  # Don't pass two of them.
+        assert (location is not None) + (text is not None) + bool(
+            new
+        ) <= 1  # Don't pass two of them.
 
         if location or text or new:
             editor_buffer = self._get_or_create_editor_buffer(location=location, text=text)
@@ -294,7 +296,9 @@ class WindowArrangement(object):
 
     def vsplit(self, location=None, new=False, text=None):
         """Split vertically."""
-        assert location is None or text is None or new is False  # Don't pass two of them.
+        assert (location is not None) + (text is not None) + bool(
+            new
+        ) <= 1  # Don't pass two of them.
 
         if location or text or new:
             editor_buffer = self._get_or_create_editor_buffer(location=location, text=text)
@@ -488,7 +492,9 @@ class WindowArrangement(object):
             if t.window_count() == 0:
                 self.tab_pages.remove(t)
 
-                if i >= self.active_tab_index:
+                if i < self.active_tab_index:
+                    self.active_tab_index = max(0, self.active_tab_index - 1)
+                elif i == self.active_tab_index:
                     self.active_tab_index = max(0, self.active_tab_index - 1)
 
         # When there are no windows/tabs left, create a new tab.

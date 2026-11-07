@@ -97,7 +97,7 @@ def create_key_bindings(editor):
 
         # Insert tab.
         if editor.expand_tab:
-            b.insert_text('    ')
+            b.insert_text(' ' * editor.tabstop)
         else:
             b.insert_text('\t')
 
@@ -131,7 +131,7 @@ def create_key_bindings(editor):
         """
         b = event.app.current_buffer
         if editor.expand_tab:
-            b.insert_text('    ')
+            b.insert_text(' ' * editor.tabstop)
         else:
             b.insert_text('\t')
 
@@ -197,6 +197,8 @@ def create_key_bindings(editor):
         Open file/directory in file explorer mode.
         """
         name_under_cursor = event.current_buffer.document.current_line
+        if not name_under_cursor.strip() or name_under_cursor.lstrip().startswith('"'):
+            return
         new_path = os.path.normpath(
             os.path.join(editor.current_editor_buffer.location, name_under_cursor)
         )

@@ -55,6 +55,7 @@ class EditorBuffer(object):
             completer=DocumentCompleter(editor, self),
             document=Document(text, 0),
             on_text_changed=self._on_text_changed,
+            read_only=self.isdir,
         )
 
         # List of reporting errors, and index of those errors by line.
