@@ -86,3 +86,9 @@ def test_gzip_can_open_location():
     g = GZipFileIO()
     assert g.can_open_location('/tmp/some-file.txt.gz') is True
     assert g.can_open_location('/tmp/some-file.txt') is False
+
+
+def test_directory_io_handles_tilde(editor):
+    editor.load_initial_files(['~'])
+    eb = editor.window_arrangement.active_editor_buffer
+    assert eb.in_file_explorer_mode is True

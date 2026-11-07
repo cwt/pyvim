@@ -23,6 +23,7 @@ class FileIO(EditorIO):
 
     def can_open_location(cls, location):
         # We can handle all local files.
+        location = os.path.expanduser(location)
         return '://' not in location and not os.path.isdir(location)
 
     def exists(self, location):
@@ -93,12 +94,14 @@ class DirectoryIO(EditorIO):
 
     def can_open_location(cls, location):
         # We can handle all local directories.
+        location = os.path.expanduser(location)
         return '://' not in location and os.path.isdir(location)
 
     def exists(self, location):
-        return os.path.isdir(location)
+        return os.path.isdir(os.path.expanduser(location))
 
     def read(self, directory):
+        directory = os.path.expanduser(directory)
         # Read content.
         content = sorted(os.listdir(directory))
         directories = []
